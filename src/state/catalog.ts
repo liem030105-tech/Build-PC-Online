@@ -3,7 +3,7 @@ import { BUILTIN_PARTS, setCatalog, type Part } from '../data/parts';
 
 const CACHE_KEY = 'buildpc-catalog-v1';
 
-/** server: vừa tải từ Xano. cache: bản tải lần trước. builtin: danh mục đi kèm trò chơi. */
+/** server: vừa tải từ Xano. cache: bản tải lần trước. builtin: danh mục mẫu đi kèm web. */
 export type CatalogSource = 'server' | 'cache' | 'builtin';
 
 export interface CatalogStatus {
@@ -40,9 +40,9 @@ function usable(rows: unknown): { parts: Part[]; skipped: number } | null {
 }
 
 /**
- * Chọn danh mục linh kiện cho phiên chơi, theo thứ tự ưu tiên:
+ * Chọn danh mục linh kiện cho phiên làm việc, theo thứ tự ưu tiên:
  * máy chủ Xano, rồi bản đã tải lần trước, cuối cùng là danh mục đi kèm.
- * Không bao giờ ném lỗi: mất mạng thì trò chơi vẫn chạy.
+ * Không bao giờ ném lỗi: mất mạng thì web vẫn chạy.
  */
 export async function loadCatalog(
   fetchRows: (() => Promise<unknown[]>) | null,

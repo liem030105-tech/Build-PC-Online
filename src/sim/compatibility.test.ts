@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { resolveBuild, type BuildIds } from '../data/parts';
-import { checkBuild, requiredWatt } from './compatibility';
+import { PART_BY_ID, resolveBuild, type BuildIds, type Part } from '../data/parts';
+import { checkBuild, partConflicts, requiredWatt } from './compatibility';
 
 const VALID: BuildIds = {
   cpu: 'cpu-7600',
@@ -101,5 +101,40 @@ describe('requiredWatt', () => {
   it('tính (CPU + GPU + 100) dư 20%', () => {
     expect(requiredWatt(resolveBuild({ cpu: 'cpu-7600', gpu: 'gpu-4060' }))).toBe(336);
     expect(requiredWatt(resolveBuild({ cpu: 'cpu-7600' }))).toBe(198);
+  });
+});
+
+describe('partConflicts', () => {
+  const part = (id: string) => PART_BY_ID.get(id) as Part;
+
+  it('không báo gì khi build còn trống', () => {
+    expect(partConflicts({}, part('cpu-5600'))).toEqual([]);
+  });
+
+  it('báo CPU khác socket với mainboard đã chọn', () => {
+    const build = resolveBuild({ mainboard: 'mb-b650' });
+    expect(partConflicts(build, part('cpu-7600'))).toEqual([]);
+    expect(partConflicts(build, part('cpu-5600'))).toHaveLength(1);
+  });
+
+  it('đổi linh kiện cùng loại thì bỏ qua linh kiện cũ', () => {
+    const build = resolveBuild({ cpu: 'cpu-5600', mainboard: 'mb-b650' });
+    expect(partConflicts(build, part('cpu-7600'))).toEqual([]);
+  });
+
+  it('báo RAM sai loại và mainboard không vừa case', () => {
+    expect(partConflicts(resolveBuild({ mainboard: 'mb-b550m' }), part('ram-d5-16'))).toHaveLength(1);
+    expect(partConflicts(resolveBuild({ case: 'case-matx' }), part('mb-b650'))).toHaveLength(1);
+  });
+
+  it('báo nguồn yếu khi chọn card đồ họa ngốn điện', () => {
+    const build = resolveBuild({ cpu: 'cpu-7600', psu: 'psu-450' });
+    expect(partConflicts(build, part('gpu-4060'))).toEqual([]);
+    expect(partConflicts(build, part('gpu-4090'))).toHaveLength(1);
+  });
+
+  it('không tính xung đột sẵn có giữa các linh kiện khác', () => {
+    const build = resolveBuild({ cpu: 'cpu-5600', mainboard: 'mb-b650' });
+    expect(partConflicts(build, part('ssd-1000'))).toEqual([]);
   });
 });

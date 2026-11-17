@@ -171,7 +171,7 @@ export class XanoClient {
   }
 }
 
-/** Thông báo lỗi tiếng Anh mặc định của Xano, đổi sang tiếng Việt cho người chơi. */
+/** Thông báo lỗi tiếng Anh mặc định của Xano, đổi sang tiếng Việt cho người dùng. */
 const MESSAGES: Record<string, string> = {
   'Invalid Credentials.': 'Email hoặc mật khẩu không đúng.',
   'This account is already in use.': 'Email này đã được đăng ký. Hãy đăng nhập.',

@@ -58,7 +58,7 @@ const positive = (v: unknown): number | null => {
 
 /**
  * Đổi một dòng của bảng `part` thành linh kiện. Trả về null nếu dòng thiếu
- * thông số bắt buộc của loại đó, để một dòng nhập sai không làm hỏng cả trò chơi.
+ * thông số bắt buộc của loại đó, để một dòng nhập sai không làm hỏng cả web.
  */
 export function rowToPart(raw: unknown): Part | null {
   if (!raw || typeof raw !== 'object') return null;

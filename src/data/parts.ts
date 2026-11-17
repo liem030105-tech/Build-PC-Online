@@ -99,7 +99,7 @@ export const CATEGORY_BY_ID = Object.fromEntries(CATEGORIES.map((c) => [c.id, c]
   CategoryMeta
 >;
 
-/** Danh mục đi kèm trò chơi: dùng khi không tải được danh mục từ máy chủ. */
+/** Danh mục mẫu đi kèm web: dùng khi không tải được danh mục từ máy chủ. */
 export const BUILTIN_PARTS: readonly Part[] = [
   // CPU
   { category: 'cpu', id: 'cpu-12100f', name: 'Intel Core i3-12100F', price: 2_200_000, socket: 'LGA1700', tdp: 58, hasIGPU: false, igpuScore: 0, gameScore: 85 },

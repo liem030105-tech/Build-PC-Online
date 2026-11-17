@@ -1,4 +1,4 @@
-import type { Build, Category } from '../data/parts';
+import type { Build, Category, Part } from '../data/parts';
 
 export interface BuildCheck {
   ok: boolean;
@@ -70,4 +70,16 @@ export function checkBuild(build: Build): BuildCheck {
     ...conflicts,
   ];
   return { ok: errors.length === 0, errors, missing, conflicts };
+}
+
+/**
+ * Những xung đột mới xuất hiện nếu chọn `part` thay cho linh kiện cùng loại đang có.
+ * Mảng rỗng nghĩa là linh kiện này lắp được với phần còn lại của build.
+ */
+export function partConflicts(build: Build, part: Part): string[] {
+  const without: Build = { ...build };
+  delete without[part.category];
+  const base = new Set(checkBuild(without).conflicts);
+  const withPart = { ...without, [part.category]: part } as Build;
+  return checkBuild(withPart).conflicts.filter((c) => !base.has(c));
 }
