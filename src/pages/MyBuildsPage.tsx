@@ -1,4 +1,5 @@
-import { FolderOpen, Plus, Share2, Trash2, TriangleAlert } from 'lucide-react';
+import { FolderOpen, Megaphone, Plus, Share2, Trash2, TriangleAlert } from 'lucide-react';
+import { PublishPostDialog } from '@/components/posts/PublishPostDialog';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { toast } from 'sonner';
@@ -37,6 +38,7 @@ function Message({ title, children }: { title: string; children: React.ReactNode
 
 function BuildCard({ b, onDelete }: { b: SavedBuild; onDelete: (b: SavedBuild) => void }) {
   const navigate = useNavigate();
+  const [publishOpen, setPublishOpen] = useState(false);
   const name = (id?: string) => (id ? PART_BY_ID.get(id)?.name : undefined);
   const count = CATEGORIES.filter((c) => PART_BY_ID.get(b.parts[c.id] ?? '')).length;
 
@@ -70,10 +72,19 @@ function BuildCard({ b, onDelete }: { b: SavedBuild; onDelete: (b: SavedBuild) =
           <FolderOpen />
           Mở
         </Button>
-        <Button size="sm" variant="outline" onClick={() => copyText(shareUrl(b.parts))}>
-          <Share2 />
-          Chia sẻ
+        <Button size="sm" variant="outline" onClick={() => setPublishOpen(true)}>
+          <Megaphone />
+          Đăng bài
         </Button>
+        <Button size="icon" variant="ghost" aria-label="Sao chép link chia sẻ" onClick={() => copyText(shareUrl(b.parts))}>
+          <Share2 />
+        </Button>
+        <PublishPostDialog
+          ids={b.parts}
+          open={publishOpen}
+          onOpenChange={setPublishOpen}
+          defaultTitle={b.name}
+        />
         <AlertDialog>
           <AlertDialogTrigger asChild>
             <Button size="icon" variant="ghost" className="ml-auto text-muted-foreground" aria-label="Xoá build">

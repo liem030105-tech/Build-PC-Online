@@ -163,3 +163,125 @@ describe('XanoClient', () => {
     expect(calls[0].url).toBe('https://example.xano.io/api:auth/auth/login');
   });
 });
+
+describe('XanoClient: bài đăng cộng đồng', () => {
+  const POST = {
+    id: 3,
+    created_at: 100,
+    user_id: 7,
+    author_name: 'Tester',
+    title: 'PC chơi game',
+    description: 'Mô tả',
+    purpose: 'gaming',
+    parts: { cpu: 'cpu-7600' },
+    total_price: 5200000,
+    like_count: 2,
+    comment_count: 1,
+  };
+
+  it('lấy danh sách bài không cần đăng nhập, gửi trang, sắp xếp và nhu cầu', async () => {
+    const { fn, calls } = fakeFetch({
+      'GET /post?page=2&sort=top&purpose=gaming': {
+        body: { items: [POST], curPage: 2, nextPage: 3, itemsTotal: 30 },
+      },
+    });
+    const client = new XanoClient({ apiUrl: API, fetch: fn, storage: memoryStorage() });
+
+    const page = await client.listPosts({ page: 2, sort: 'top', purpose: 'gaming' });
+
+    expect(page).toEqual({ items: [POST], curPage: 2, nextPage: 3, itemsTotal: 30 });
+    expect(calls[0].headers.Authorization).toBeUndefined();
+  });
+
+  it('bỏ tham số nhu cầu khi xem tất cả, chuẩn hoá bài thiếu trường', async () => {
+    const { fn } = fakeFetch({
+      'GET /post?page=1&sort=new': { body: { items: [{ id: 9, title: 'X', parts: null }], nextPage: null } },
+    });
+    const client = new XanoClient({ apiUrl: API, fetch: fn, storage: memoryStorage() });
+
+    const page = await client.listPosts();
+
+    expect(page.nextPage).toBeNull();
+    expect(page.items[0]).toMatchObject({ id: 9, title: 'X', parts: {}, purpose: 'other', like_count: 0, author_name: '' });
+  });
+
+  it('chi tiết bài trả kèm bình luận', async () => {
+    const comment = { id: 1, created_at: 200, post_id: 3, user_id: 8, author_name: 'B', content: 'Đẹp' };
+    const { fn } = fakeFetch({ 'GET /post/3': { body: { post: POST, comments: [comment] } } });
+    const client = new XanoClient({ apiUrl: API, fetch: fn, storage: memoryStorage() });
+
+    expect(await client.getPost(3)).toEqual({ ...POST, comments: [comment] });
+  });
+
+  it('đăng bài gửi đúng các trường, có token', async () => {
+    const { fn, calls } = fakeFetch({ 'POST /post': { body: POST } });
+    const client = new XanoClient({
+      apiUrl: API,
+      fetch: fn,
+      storage: memoryStorage({ 'buildpc-auth-token': 'tok' }),
+    });
+
+    await client.createPost({
+      title: 'PC chơi game',
+      description: 'Mô tả',
+      purpose: 'gaming',
+      parts: { cpu: 'cpu-7600' },
+      totalPrice: 5200000,
+    });
+
+    expect(calls[0].headers.Authorization).toBe('Bearer tok');
+    expect(calls[0].body).toEqual({
+      title: 'PC chơi game',
+      description: 'Mô tả',
+      purpose: 'gaming',
+      parts: { cpu: 'cpu-7600' },
+      total_price: 5200000,
+    });
+  });
+
+  it('thích / bỏ thích trả trạng thái mới, danh sách đã thích là các id bài', async () => {
+    const { fn } = fakeFetch({
+      'POST /post/3/like': { body: { liked: true, like_count: 3 } },
+      'GET /post_like': { body: [{ id: 1, post_id: 3 }, { id: 2, post_id: 5 }] },
+    });
+    const client = new XanoClient({ apiUrl: API, fetch: fn, storage: memoryStorage({ 'buildpc-auth-token': 't' }) });
+
+    expect(await client.toggleLike(3)).toEqual({ liked: true, likeCount: 3 });
+    expect(await client.likedPostIds()).toEqual([3, 5]);
+  });
+
+  it('bình luận và xoá gọi đúng đường dẫn', async () => {
+    const { fn, calls } = fakeFetch({
+      'POST /post/3/comment': { body: { id: 4, post_id: 3, content: 'Hay' } },
+      'DELETE /comment/4': {},
+      'DELETE /post/3': {},
+    });
+    const client = new XanoClient({ apiUrl: API, fetch: fn, storage: memoryStorage({ 'buildpc-auth-token': 't' }) });
+
+    expect((await client.addComment(3, 'Hay')).content).toBe('Hay');
+    await client.deleteComment(4);
+    await client.deletePost(3);
+    expect(calls.map((c) => `${c.method} ${c.url.replace(API, '')}`)).toEqual([
+      'POST /post/3/comment',
+      'DELETE /comment/4',
+      'DELETE /post/3',
+    ]);
+    expect(calls[0].body).toEqual({ content: 'Hay' });
+  });
+
+  it('đổi thông báo lỗi không dấu của máy chủ sang tiếng Việt có dấu', async () => {
+    const { fn } = fakeFetch({ 'POST /post': { status: 400, body: { message: 'Tieu de can tu 3 den 120 ky tu.' } } });
+    const client = new XanoClient({ apiUrl: API, fetch: fn, storage: memoryStorage({ 'buildpc-auth-token': 't' }) });
+
+    await expect(
+      client.createPost({ title: 'ab', description: '', purpose: 'other', parts: {}, totalPrice: 0 }),
+    ).rejects.toThrow('Tiêu đề cần từ 3 đến 120 ký tự.');
+  });
+
+  it('báo quá tải khi gói Free vượt giới hạn request', async () => {
+    const { fn } = fakeFetch({ 'GET /post?page=1&sort=new': { status: 429, body: { message: 'Whoa there!' } } });
+    const client = new XanoClient({ apiUrl: API, fetch: fn, storage: memoryStorage() });
+
+    await expect(client.listPosts()).rejects.toThrow('Máy chủ đang quá tải');
+  });
+});

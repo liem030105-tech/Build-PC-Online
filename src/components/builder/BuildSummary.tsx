@@ -1,4 +1,5 @@
-import { Save, Share2, Trash2 } from 'lucide-react';
+import { Megaphone, Save, Share2, Trash2 } from 'lucide-react';
+import { PublishPostDialog } from '@/components/posts/PublishPostDialog';
 import { useState } from 'react';
 import {
   AlertDialog,
@@ -91,6 +92,7 @@ export function ResetBuildButton({
 /** Tổng tiền, công suất và các nút Lưu / Chia sẻ / Tháo hết. */
 export function BuildSummary({ ids, build, onReset }: Props) {
   const [saveOpen, setSaveOpen] = useState(false);
+  const [publishOpen, setPublishOpen] = useState(false);
   const total = buildPrice(ids);
   const count = CATEGORIES.filter((c) => build[c.id]).length;
   const empty = count === 0;
@@ -101,9 +103,13 @@ export function BuildSummary({ ids, build, onReset }: Props) {
         <Save />
         Lưu build
       </Button>
+      <Button variant="outline" className="w-full" disabled={empty} onClick={() => setPublishOpen(true)}>
+        <Megaphone />
+        Đăng lên cộng đồng
+      </Button>
       <Button variant="outline" className="w-full" disabled={empty} onClick={() => copyText(shareUrl(ids))}>
         <Share2 />
-        Chia sẻ
+        Chia sẻ link
       </Button>
     </>
   );
@@ -141,8 +147,17 @@ export function BuildSummary({ ids, build, onReset }: Props) {
             </div>
           </div>
           <div className="flex gap-2">
-            <Button size="icon-lg" variant="outline" aria-label="Chia sẻ" disabled={empty} onClick={() => copyText(shareUrl(ids))}>
+            <Button size="icon-lg" variant="outline" aria-label="Chia sẻ link" disabled={empty} onClick={() => copyText(shareUrl(ids))}>
               <Share2 />
+            </Button>
+            <Button
+              size="icon-lg"
+              variant="outline"
+              aria-label="Đăng lên cộng đồng"
+              disabled={empty}
+              onClick={() => setPublishOpen(true)}
+            >
+              <Megaphone />
             </Button>
             <Button size="lg" disabled={empty} onClick={() => setSaveOpen(true)}>
               <Save />
@@ -153,6 +168,7 @@ export function BuildSummary({ ids, build, onReset }: Props) {
       </div>
 
       <SaveBuildDialog ids={ids} open={saveOpen} onOpenChange={setSaveOpen} />
+      <PublishPostDialog ids={ids} open={publishOpen} onOpenChange={setPublishOpen} />
     </>
   );
 }

@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils';
 
 const navClass = ({ isActive }: { isActive: boolean }) =>
   cn(
-    'rounded-md px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted',
+    'rounded-md px-2 py-1.5 text-sm font-medium whitespace-nowrap transition-colors hover:bg-muted sm:px-3',
     isActive ? 'text-foreground' : 'text-muted-foreground',
   );
 
@@ -33,9 +33,9 @@ function AccountMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" className="max-w-44">
+        <Button variant="outline" size="sm" className="max-w-44" aria-label="Tài khoản">
           <User />
-          <span className="truncate">{account.name || account.email}</span>
+          <span className="hidden truncate sm:inline">{account.name || account.email}</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
@@ -61,19 +61,23 @@ export function Layout() {
   return (
     <div className="flex min-h-svh flex-col">
       <header className="sticky top-0 z-30 border-b bg-background/85 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-6xl items-center gap-2 px-4">
-          <Link to="/" className="mr-2 flex items-center gap-2 font-semibold">
+        <div className="mx-auto flex h-14 max-w-6xl items-center gap-1 px-4 sm:gap-2">
+          <Link to="/" className="mr-1 flex shrink-0 items-center gap-2 font-semibold sm:mr-2" aria-label="Build PC Online">
             <span className="flex size-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
               <Cpu className="size-4" />
             </span>
             <span className="hidden sm:inline">Build PC Online</span>
           </Link>
-          <nav className="flex items-center gap-1">
+          <nav className="flex min-w-0 items-center sm:gap-1">
             <NavLink to="/" end className={navClass}>
               Build PC
             </NavLink>
+            <NavLink to="/posts" className={navClass}>
+              Cộng đồng
+            </NavLink>
             <NavLink to="/builds" className={navClass}>
-              Build của tôi
+              <span className="sm:hidden">Của tôi</span>
+              <span className="hidden sm:inline">Build của tôi</span>
             </NavLink>
           </nav>
           <div className="ml-auto">

@@ -3,6 +3,8 @@ import { Layout } from '@/components/layout/Layout';
 import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import BuilderPage from '@/pages/BuilderPage';
+import CommunityPage from '@/pages/CommunityPage';
+import PostDetailPage from '@/pages/PostDetailPage';
 import LoginPage from '@/pages/LoginPage';
 import MyBuildsPage from '@/pages/MyBuildsPage';
 import NotFoundPage from '@/pages/NotFoundPage';
@@ -16,6 +18,8 @@ export default function App() {
         <Routes>
           <Route element={<Layout />}>
             <Route index element={<BuilderPage />} />
+            <Route path="posts" element={<CommunityPage />} />
+            <Route path="posts/:id" element={<PostDetailPage />} />
             <Route path="builds" element={<MyBuildsPage />} />
             <Route path="login" element={<LoginPage />} />
             <Route path="signup" element={<SignupPage />} />
