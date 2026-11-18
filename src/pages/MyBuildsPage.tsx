@@ -1,5 +1,7 @@
-import { FolderOpen, Megaphone, Plus, Share2, Trash2, TriangleAlert } from 'lucide-react';
+import { BadgeCheck, FolderOpen, Megaphone, Plus, Share2, Trash2, TriangleAlert } from 'lucide-react';
 import { PublishPostDialog } from '@/components/posts/PublishPostDialog';
+import { VerifyBadge } from '@/components/verify/VerifyBadge';
+import { VerifyRequestDialog } from '@/components/verify/VerifyRequestDialog';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { toast } from 'sonner';
@@ -36,7 +38,15 @@ function Message({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function BuildCard({ b, onDelete }: { b: SavedBuild; onDelete: (b: SavedBuild) => void }) {
+function BuildCard({
+  b,
+  onDelete,
+  onVerify,
+}: {
+  b: SavedBuild;
+  onDelete: (b: SavedBuild) => void;
+  onVerify: (b: SavedBuild) => void;
+}) {
   const navigate = useNavigate();
   const [publishOpen, setPublishOpen] = useState(false);
   const name = (id?: string) => (id ? PART_BY_ID.get(id)?.name : undefined);
@@ -55,6 +65,7 @@ function BuildCard({ b, onDelete }: { b: SavedBuild; onDelete: (b: SavedBuild) =
         <CardDescription>
           Lưu ngày {formatDate(b.created_at)} · {count}/{REQUIRED_CATEGORIES.length} linh kiện chính
         </CardDescription>
+        {b.verify_status !== 'none' && <VerifyBadge status={b.verify_status} className="mt-1 w-fit" />}
       </CardHeader>
       <CardContent className="flex-1 space-y-1 text-sm">
         <div className="truncate">
@@ -66,6 +77,18 @@ function BuildCard({ b, onDelete }: { b: SavedBuild; onDelete: (b: SavedBuild) =
           {name(b.parts.gpu) ?? '—'}
         </div>
         <div className="pt-2 text-lg font-semibold tabular-nums">{vnd(b.total_price)}</div>
+        {b.verify_status === 'rejected' && b.verify_reason && (
+          <p className="rounded-md bg-destructive/10 px-2 py-1.5 text-xs text-destructive">Lý do: {b.verify_reason}</p>
+        )}
+        {b.verify_status === 'pending' && (
+          <p className="text-xs text-muted-foreground">Admin đang xem video, bạn sẽ thấy kết quả tại đây.</p>
+        )}
+        {(b.verify_status === 'none' || b.verify_status === 'rejected') && (
+          <Button variant="link" size="sm" className="h-auto px-0" onClick={() => onVerify(b)}>
+            <BadgeCheck />
+            {b.verify_status === 'rejected' ? 'Gửi lại yêu cầu xác minh' : 'Yêu cầu xác minh'}
+          </Button>
+        )}
       </CardContent>
       <CardFooter className="gap-2">
         <Button size="sm" onClick={open}>
@@ -84,6 +107,8 @@ function BuildCard({ b, onDelete }: { b: SavedBuild; onDelete: (b: SavedBuild) =
           open={publishOpen}
           onOpenChange={setPublishOpen}
           defaultTitle={b.name}
+          buildId={b.id}
+          verified={b.verify_status === 'approved'}
         />
         <AlertDialog>
           <AlertDialogTrigger asChild>
@@ -113,6 +138,7 @@ export default function MyBuildsPage() {
   const { account, ready, session, configured } = useSession();
   const [builds, setBuilds] = useState<SavedBuild[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [verifying, setVerifying] = useState<SavedBuild | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -208,10 +234,20 @@ export default function MyBuildsPage() {
       {builds && builds.length > 0 && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {builds.map((b) => (
-            <BuildCard key={b.id} b={b} onDelete={remove} />
+            <BuildCard key={b.id} b={b} onDelete={remove} onVerify={setVerifying} />
           ))}
         </div>
       )}
+
+      <VerifyRequestDialog
+        build={verifying}
+        onOpenChange={(open) => !open && setVerifying(null)}
+        onSubmitted={(id) =>
+          setBuilds((list) =>
+            list?.map((x) => (x.id === id ? { ...x, verify_status: 'pending', verify_reason: '' } : x)) ?? null,
+          )
+        }
+      />
     </div>
   );
 }

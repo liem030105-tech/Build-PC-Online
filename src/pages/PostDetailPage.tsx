@@ -1,4 +1,4 @@
-import { ArrowLeft, Copy, Pencil, Trash2, TriangleAlert } from 'lucide-react';
+import { ArrowLeft, BadgeCheck, Copy, Pencil, Trash2, TriangleAlert } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
@@ -23,6 +23,9 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { VerifyBadge } from '@/components/verify/VerifyBadge';
+import { VideoList } from '@/components/verify/VideoList';
 import { buildPrice, resolveBuild } from '@/data/parts';
 import { purposeLabel } from '@/data/purposes';
 import { useSession } from '@/hooks/useStores';
@@ -118,6 +121,7 @@ export default function PostDetailPage() {
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           <Badge variant="secondary">{purposeLabel(post.purpose)}</Badge>
+          {post.verified && <VerifyBadge status="approved" />}
           <span>
             {post.author_name || 'Ẩn danh'} · {formatDate(post.created_at)}
           </span>
@@ -175,6 +179,21 @@ export default function PostDetailPage() {
       </div>
 
       <PostGallery urls={post.images.map((p) => session.client.mediaUrl(p))} title={post.title} />
+
+      {post.verified && post.videos.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BadgeCheck className="size-4.5 text-emerald-600 dark:text-emerald-400" />
+              Video thực tế
+            </CardTitle>
+            <CardDescription>Admin đã xem các video này và xác minh build chạy đúng cấu hình bên dưới.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <VideoList videos={post.videos} />
+          </CardContent>
+        </Card>
+      )}
 
       <CompatibilityPanel build={build} />
       <PartTable build={build} />

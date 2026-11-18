@@ -17,6 +17,37 @@ export interface SavedBuild {
   name: string;
   parts: BuildIds;
   total_price: number;
+  verify_status: VerifyStatus;
+  /** Lý do admin từ chối (khi verify_status = rejected). */
+  verify_reason: string;
+  /** Video đã được duyệt (khi verify_status = approved). */
+  verified_videos: VideoLink[];
+}
+
+/** none: chưa gửi; pending: chờ admin duyệt; approved: đã xác minh; rejected: bị từ chối. */
+export type VerifyStatus = 'none' | 'pending' | 'approved' | 'rejected';
+
+/** Link video quay một game chạy trên máy, gửi kèm yêu cầu xác minh. */
+export interface VideoLink {
+  game: string;
+  url: string;
+}
+
+/** Một yêu cầu xác minh (bảng `verification`), admin xem và duyệt. */
+export interface Verification {
+  id: number;
+  created_at: number;
+  build_id: number;
+  user_id: number;
+  author_name: string;
+  build_name: string;
+  /** Bản chép build lúc gửi yêu cầu. */
+  parts: BuildIds;
+  videos: VideoLink[];
+  note: string;
+  status: Exclude<VerifyStatus, 'none'>;
+  reject_reason: string;
+  reviewed_at: number;
 }
 
 /** Bài đăng cộng đồng (bảng `post`). */
@@ -37,6 +68,12 @@ export interface Post {
   comment_count: number;
   /** Đường dẫn ảnh trên Xano (/vault/...), ảnh đầu là ảnh bìa. Dùng mediaUrl() để ra link đầy đủ. */
   images: string[];
+  /** Build đã lưu mà bài được đăng từ đó (0 nếu đăng thẳng từ trang Build PC). */
+  build_id: number;
+  /** Build gốc đã được admin xác minh. */
+  verified: boolean;
+  /** Video thực tế của build đã xác minh. */
+  videos: VideoLink[];
 }
 
 export interface PostComment {
@@ -70,6 +107,8 @@ export interface NewPost {
   totalPrice: number;
   /** Đường dẫn ảnh đã tải lên bằng uploadImage(), tối đa 4. */
   images?: string[];
+  /** Đăng từ build đã lưu: máy chủ lấy linh kiện của build đó và chép trạng thái xác minh. */
+  buildId?: number;
 }
 
 export class XanoError extends Error {
@@ -197,9 +236,12 @@ export class XanoClient {
   }
 
   /** Một trang bài đăng cộng đồng (12 bài). Không cần đăng nhập. */
-  async listPosts(opts: { page?: number; sort?: PostSort; purpose?: string | null } = {}): Promise<PostPage> {
+  async listPosts(
+    opts: { page?: number; sort?: PostSort; purpose?: string | null; verified?: boolean } = {},
+  ): Promise<PostPage> {
     const params = new URLSearchParams({ page: String(opts.page ?? 1), sort: opts.sort ?? 'new' });
     if (opts.purpose) params.set('purpose', opts.purpose);
+    if (opts.verified) params.set('verified', 'true');
     const res = await this.request<Partial<PostPage> | null>(this.apiUrl, 'GET', `/post?${params}`);
     return {
       items: (Array.isArray(res?.items) ? res.items : []).map(normalizePost),
@@ -227,6 +269,7 @@ export class XanoClient {
       parts: input.parts,
       total_price: input.totalPrice,
       images: input.images ?? [],
+      ...(input.buildId ? { build_id: input.buildId } : {}),
     });
     return normalizePost(row);
   }
@@ -259,6 +302,26 @@ export class XanoClient {
 
   async deleteComment(id: number): Promise<void> {
     await this.request<unknown>(this.apiUrl, 'DELETE', `/comment/${id}`);
+  }
+
+  /** Gửi yêu cầu xác minh cho build đã lưu, kèm 1–4 video chơi game trên máy đó. */
+  async requestVerification(buildId: number, videos: VideoLink[], note: string): Promise<Verification> {
+    const row = await this.request<Verification>(this.apiUrl, 'POST', `/build/${buildId}/verify`, { videos, note });
+    return normalizeVerification(row);
+  }
+
+  /** Các yêu cầu xác minh theo trạng thái, mới nhất trước (chỉ admin). */
+  async listVerifications(status: Exclude<VerifyStatus, 'none'> = 'pending'): Promise<Verification[]> {
+    const rows = await this.request<Verification[]>(this.apiUrl, 'GET', `/verification?status=${status}`);
+    return (Array.isArray(rows) ? rows : []).map(normalizeVerification);
+  }
+
+  async approveVerification(id: number): Promise<void> {
+    await this.request<unknown>(this.apiUrl, 'POST', `/verification/${id}/approve`, {});
+  }
+
+  async rejectVerification(id: number, reason: string): Promise<void> {
+    await this.request<unknown>(this.apiUrl, 'POST', `/verification/${id}/reject`, { reason });
   }
 
   /** Tải một ảnh lên kho của Xano. Trả về đường dẫn `/vault/...` để gắn vào bài đăng. */
@@ -344,6 +407,17 @@ const MESSAGES: Record<string, string> = {
   'Khong tim thay linh kien.': 'Không tìm thấy linh kiện. Có thể đã bị xoá.',
   'Toi da 4 anh moi bai dang.': 'Mỗi bài đăng tối đa 4 ảnh.',
   'Anh khong hop le.': 'Ảnh không hợp lệ, hãy tải lại ảnh.',
+  'Khong tim thay build.': 'Không tìm thấy build. Có thể đã bị xoá.',
+  'Day khong phai build cua ban.': 'Đây không phải build của bạn.',
+  'Build khong hop le.': 'Build không hợp lệ.',
+  'Build nay dang cho duyet hoac da duoc xac minh.': 'Build này đang chờ duyệt hoặc đã được xác minh.',
+  'Can tu 1 den 4 video.': 'Cần từ 1 đến 4 video.',
+  'Link video hoac ten game khong hop le.': 'Link video hoặc tên game không hợp lệ.',
+  'Ghi chu toi da 500 ky tu.': 'Ghi chú tối đa 500 ký tự.',
+  'Chi admin moi duoc duyet xac minh.': 'Chỉ admin mới được duyệt xác minh.',
+  'Khong tim thay yeu cau xac minh.': 'Không tìm thấy yêu cầu xác minh.',
+  'Yeu cau nay da duoc xu ly.': 'Yêu cầu này đã được xử lý.',
+  'Ly do tu choi can tu 3 den 300 ky tu.': 'Lý do từ chối cần từ 3 đến 300 ký tự.',
 };
 
 function translate(status: number, message: string): string {
@@ -371,6 +445,9 @@ function normalizePost(row: Post): Post {
     like_count: num(row?.like_count),
     comment_count: num(row?.comment_count),
     images: Array.isArray(row?.images) ? row.images.filter((p): p is string => typeof p === "string" && p.startsWith("/")).slice(0, 4) : [],
+    build_id: num(row?.build_id),
+    verified: row?.verified === true,
+    videos: normalizeVideos(row?.videos),
   };
 }
 
@@ -385,6 +462,18 @@ function normalizeComment(row: PostComment): PostComment {
   };
 }
 
+const STATUSES: VerifyStatus[] = ['none', 'pending', 'approved', 'rejected'];
+const status = (v: unknown): VerifyStatus => (STATUSES.includes(v as VerifyStatus) ? (v as VerifyStatus) : 'none');
+
+/** Chỉ giữ video có link https và tên game; tối đa 4. */
+function normalizeVideos(v: unknown): VideoLink[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .filter((x): x is VideoLink => !!x && typeof x.url === 'string' && x.url.startsWith('https://'))
+    .map((x) => ({ game: str(x.game) || 'Game', url: x.url }))
+    .slice(0, 4);
+}
+
 function normalizeBuild(row: SavedBuild): SavedBuild {
   return {
     id: row.id,
@@ -392,5 +481,26 @@ function normalizeBuild(row: SavedBuild): SavedBuild {
     name: String(row.name ?? ''),
     parts: row.parts && typeof row.parts === 'object' ? row.parts : {},
     total_price: Number(row.total_price) || 0,
+    verify_status: status(row.verify_status),
+    verify_reason: str(row.verify_reason),
+    verified_videos: normalizeVideos(row.verified_videos),
+  };
+}
+
+function normalizeVerification(row: Verification): Verification {
+  const s = status(row?.status);
+  return {
+    id: num(row?.id),
+    created_at: num(row?.created_at),
+    build_id: num(row?.build_id),
+    user_id: num(row?.user_id),
+    author_name: str(row?.author_name),
+    build_name: str(row?.build_name),
+    parts: row?.parts && typeof row.parts === 'object' ? row.parts : {},
+    videos: normalizeVideos(row?.videos),
+    note: str(row?.note),
+    status: s === 'none' ? 'pending' : s,
+    reject_reason: str(row?.reject_reason),
+    reviewed_at: num(row?.reviewed_at),
   };
 }

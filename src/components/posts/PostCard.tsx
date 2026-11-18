@@ -7,6 +7,7 @@ import { purposeLabel } from '@/data/purposes';
 import { formatDate, vnd } from '@/lib/format';
 import type { Post } from '@/net/xano';
 import { session } from '@/state/session';
+import { VerifyBadge } from '@/components/verify/VerifyBadge';
 import { LikeButton } from './LikeButton';
 
 /** Thẻ tóm tắt bài đăng trong lưới Cộng đồng; bấm vào thẻ để mở chi tiết. */
@@ -29,6 +30,7 @@ export function PostCard({ post }: { post: Post }) {
       <CardHeader>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Badge variant="secondary">{purposeLabel(post.purpose)}</Badge>
+          {post.verified && <VerifyBadge status="approved" />}
           <span className="truncate">
             {post.author_name || 'Ẩn danh'} · {formatDate(post.created_at)}
           </span>

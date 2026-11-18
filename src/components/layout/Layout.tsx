@@ -1,4 +1,4 @@
-import { Cpu, LogOut, Shield, User } from 'lucide-react';
+import { BadgeCheck, Cpu, LogOut, Shield, User } from 'lucide-react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router';
 import { Button } from '@/components/ui/button';
 import {
@@ -46,6 +46,12 @@ function AccountMenu() {
           <DropdownMenuItem onSelect={() => navigate('/admin')}>
             <Shield />
             Quản trị linh kiện
+          </DropdownMenuItem>
+        )}
+        {account.role === 'admin' && (
+          <DropdownMenuItem onSelect={() => navigate('/admin/verify')}>
+            <BadgeCheck />
+            Duyệt xác minh
           </DropdownMenuItem>
         )}
         <DropdownMenuItem

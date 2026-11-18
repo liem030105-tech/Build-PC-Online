@@ -1,4 +1,4 @@
-import { TriangleAlert } from 'lucide-react';
+import { BadgeCheck, TriangleAlert } from 'lucide-react';
 import { useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { toast } from 'sonner';
@@ -31,12 +31,16 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   /** Tên gợi ý cho tiêu đề, ví dụ tên build đã lưu. */
   defaultTitle?: string;
+  /** Đăng từ build đã lưu: gắn bài với build đó (để kế thừa trạng thái xác minh). */
+  buildId?: number;
+  /** Build đã lưu này đã được admin xác minh. */
+  verified?: boolean;
 }
 
 const MAX_DESC = 2000;
 
 /** Đăng một build lên trang Cộng đồng. Chỉ cho đăng build đủ linh kiện và tương thích. */
-export function PublishPostDialog({ ids, open, onOpenChange, defaultTitle = '' }: Props) {
+export function PublishPostDialog({ ids, open, onOpenChange, defaultTitle = '', buildId, verified }: Props) {
   const { account, session, configured } = useSession();
   const navigate = useNavigate();
   const [title, setTitle] = useState(defaultTitle);
@@ -73,6 +77,7 @@ export function PublishPostDialog({ ids, open, onOpenChange, defaultTitle = '' }
         parts: ids,
         totalPrice: total,
         images: paths,
+        buildId,
       });
       toast.success('Đã đăng lên cộng đồng');
       onOpenChange(false);
@@ -106,6 +111,12 @@ export function PublishPostDialog({ ids, open, onOpenChange, defaultTitle = '' }
           <DialogDescription>
             Mọi người đều xem được bài đăng, kể cả khi chưa đăng nhập. Tổng giá: {vnd(total)}.
           </DialogDescription>
+          {verified && (
+            <p className="flex items-center gap-1.5 text-sm text-emerald-700 dark:text-emerald-300">
+              <BadgeCheck className="size-4" />
+              Build đã xác minh: bài đăng sẽ có huy hiệu và video thực tế.
+            </p>
+          )}
         </DialogHeader>
 
         {!configured ? (

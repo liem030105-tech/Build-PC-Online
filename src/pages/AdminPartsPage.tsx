@@ -1,6 +1,7 @@
 import { Pencil, Plus, Search, ShieldAlert, Trash2, TriangleAlert } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
+import { AdminTabs } from '@/components/admin/AdminTabs';
 import { PartFormDialog } from '@/components/admin/PartFormDialog';
 import { ALL_SPEC_KEYS } from '@/components/admin/partFields';
 import { CATEGORY_ICON } from '@/components/builder/categoryIcons';
@@ -193,6 +194,7 @@ export default function AdminPartsPage() {
           Thêm {meta.label}
         </Button>
       </div>
+      <AdminTabs />
 
       <div className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
         {CATEGORIES.map((c) => {

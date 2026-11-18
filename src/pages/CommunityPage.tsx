@@ -1,11 +1,13 @@
-import { Plus, TriangleAlert } from 'lucide-react';
+import { BadgeCheck, Plus, TriangleAlert } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { PostCard } from '@/components/posts/PostCard';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Switch } from '@/components/ui/switch';
 import { PURPOSES } from '@/data/purposes';
 import { useSession } from '@/hooks/useStores';
 import { errorMessage } from '@/lib/errors';
@@ -18,6 +20,7 @@ export default function CommunityPage() {
   const [params, setParams] = useSearchParams();
   const purpose = params.get('purpose');
   const sort: PostSort = params.get('sort') === 'top' ? 'top' : 'new';
+  const verifiedOnly = params.get('verified') === '1';
 
   const [posts, setPosts] = useState<Post[] | null>(null);
   const [nextPage, setNextPage] = useState<number | null>(null);
@@ -29,7 +32,7 @@ export default function CommunityPage() {
     async (page: number) => {
       setError(null);
       try {
-        const res = await session.client.listPosts({ page, sort, purpose });
+        const res = await session.client.listPosts({ page, sort, purpose, verified: verifiedOnly });
         setPosts((prev) => (page === 1 ? res.items : [...(prev ?? []), ...res.items]));
         setNextPage(res.nextPage);
         setTotal(res.itemsTotal);
@@ -38,7 +41,7 @@ export default function CommunityPage() {
         if (page === 1) setPosts([]);
       }
     },
-    [session, sort, purpose],
+    [session, sort, purpose, verifiedOnly],
   );
 
   useEffect(() => {
@@ -91,15 +94,28 @@ export default function CommunityPage() {
             </button>
           ))}
         </div>
-        <Select value={sort} onValueChange={(v) => update('sort', v === 'top' ? 'top' : null)}>
-          <SelectTrigger className="sm:w-44" aria-label="Sắp xếp">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="new">Mới nhất</SelectItem>
-            <SelectItem value="top">Nhiều lượt thích</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex shrink-0 items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Switch
+              id="verified-only"
+              checked={verifiedOnly}
+              onCheckedChange={(c) => update('verified', c ? '1' : null)}
+            />
+            <Label htmlFor="verified-only" className="flex items-center gap-1 font-normal whitespace-nowrap">
+              <BadgeCheck className="size-4 text-emerald-600 dark:text-emerald-400" />
+              Đã xác minh
+            </Label>
+          </div>
+          <Select value={sort} onValueChange={(v) => update('sort', v === 'top' ? 'top' : null)}>
+            <SelectTrigger className="flex-1 sm:w-44 sm:flex-none" aria-label="Sắp xếp">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="new">Mới nhất</SelectItem>
+              <SelectItem value="top">Nhiều lượt thích</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {!configured && (
@@ -134,7 +150,7 @@ export default function CommunityPage() {
       {posts && posts.length === 0 && !error && (
         <div className="rounded-xl border border-dashed py-14 text-center">
           <p className="text-sm text-muted-foreground">
-            {purpose ? 'Chưa có bài đăng nào cho nhu cầu này.' : 'Chưa có bài đăng nào.'}
+            {verifiedOnly ? 'Chưa có bài đăng nào từ build đã xác minh.' : purpose ? 'Chưa có bài đăng nào cho nhu cầu này.' : 'Chưa có bài đăng nào.'}
           </p>
           <Button asChild variant="outline" className="mt-4">
             <Link to="/">Đăng build đầu tiên</Link>

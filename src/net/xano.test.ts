@@ -88,7 +88,7 @@ describe('XanoClient', () => {
     const client = new XanoClient({ apiUrl: API, fetch: fn, storage: memoryStorage({ 'buildpc-auth-token': 't' }) });
     const saved = await client.saveBuild('Máy 1', parts, 13_200_000);
     expect(calls[0].body).toEqual({ name: 'Máy 1', parts, total_price: 13_200_000 });
-    expect(saved).toEqual({ id: 3, created_at: 99, name: 'Máy 1', parts, total_price: 13_200_000 });
+    expect(saved).toEqual({ id: 3, created_at: 99, name: 'Máy 1', parts, total_price: 13_200_000, verify_status: 'none', verify_reason: '', verified_videos: [] });
   });
 
   it('chuẩn hóa dữ liệu build hỏng từ máy chủ', async () => {
@@ -96,7 +96,7 @@ describe('XanoClient', () => {
       'GET /build': { body: [{ id: 1, created_at: '5', name: null, parts: null, total_price: 'x' }] },
     });
     const client = new XanoClient({ apiUrl: API, fetch: fn, storage: memoryStorage() });
-    expect(await client.listBuilds()).toEqual([{ id: 1, created_at: 5, name: '', parts: {}, total_price: 0 }]);
+    expect(await client.listBuilds()).toEqual([{ id: 1, created_at: 5, name: '', parts: {}, total_price: 0, verify_status: 'none', verify_reason: '', verified_videos: [] }]);
   });
 
   it('xóa build gọi đúng đường dẫn và chấp nhận phản hồi rỗng', async () => {
@@ -122,13 +122,13 @@ describe('XanoClient', () => {
   it('giữ nguyên thông điệp lạ và báo rõ lỗi dữ liệu nhập', async () => {
     const { fn } = fakeFetch({
       'POST /build': { status: 400, body: { code: 'ERROR_CODE_INPUT_ERROR', message: 'Missing param: name' } },
-      'DELETE /build/9': { status: 404, body: { message: 'Khong tim thay build.' } },
+      'DELETE /build/9': { status: 404, body: { message: 'Loi la tu may chu.' } },
     });
     const client = new XanoClient({ apiUrl: API, fetch: fn, storage: memoryStorage() });
     await expect(client.saveBuild('', {}, 0)).rejects.toMatchObject({
       message: 'Thông tin nhập chưa hợp lệ: Missing param: name',
     });
-    await expect(client.deleteBuild(9)).rejects.toMatchObject({ message: 'Khong tim thay build.', status: 404 });
+    await expect(client.deleteBuild(9)).rejects.toMatchObject({ message: 'Loi la tu may chu.', status: 404 });
   });
 
   it('bỏ token khi máy chủ trả 401 (hết hạn)', async () => {
@@ -178,6 +178,9 @@ describe('XanoClient: bài đăng cộng đồng', () => {
     like_count: 2,
     comment_count: 1,
     images: [] as string[],
+    build_id: 0,
+    verified: false,
+    videos: [] as { game: string; url: string }[],
   };
 
   it('lấy danh sách bài không cần đăng nhập, gửi trang, sắp xếp và nhu cầu', async () => {
@@ -349,5 +352,69 @@ describe('XanoClient: ảnh bài đăng', () => {
     const client = new XanoClient({ apiUrl: API, fetch: fn, storage: memoryStorage({ 'buildpc-auth-token': 't' }) });
     await client.createPost({ title: 'abc', description: '', purpose: 'gaming', parts: {}, totalPrice: 0, images: ['/vault/a.jpg'] });
     expect((calls[0].body as { images: string[] }).images).toEqual(['/vault/a.jpg']);
+  });
+});
+
+describe('XanoClient: xác minh build', () => {
+  const VIDEOS = [{ game: 'Valorant', url: 'https://youtu.be/dQw4w9WgXcQ' }];
+  const auth = () => memoryStorage({ 'buildpc-auth-token': 't' });
+
+  it('gửi yêu cầu xác minh đúng đường dẫn và body', async () => {
+    const { fn, calls } = fakeFetch({
+      'POST /build/5/verify': { body: { id: 9, build_id: 5, status: 'pending', videos: VIDEOS, note: 'n' } },
+    });
+    const v = await new XanoClient({ apiUrl: API, fetch: fn, storage: auth() }).requestVerification(5, VIDEOS, 'n');
+    expect(calls[0].body).toEqual({ videos: VIDEOS, note: 'n' });
+    expect(v).toMatchObject({ id: 9, build_id: 5, status: 'pending', videos: VIDEOS });
+  });
+
+  it('admin lấy danh sách theo trạng thái, duyệt và từ chối kèm lý do', async () => {
+    const { fn, calls } = fakeFetch({
+      'GET /verification?status=rejected': { body: [{ id: 1, status: 'rejected', reject_reason: 'Mờ', videos: VIDEOS }] },
+      'POST /verification/1/approve': { body: {} },
+      'POST /verification/2/reject': { body: {} },
+    });
+    const client = new XanoClient({ apiUrl: API, fetch: fn, storage: auth() });
+    expect((await client.listVerifications('rejected'))[0]).toMatchObject({ status: 'rejected', reject_reason: 'Mờ' });
+    await client.approveVerification(1);
+    await client.rejectVerification(2, 'Video không thấy linh kiện');
+    expect(calls[2].body).toEqual({ reason: 'Video không thấy linh kiện' });
+  });
+
+  it('chuẩn hoá trạng thái build và bỏ video không hợp lệ', async () => {
+    const { fn } = fakeFetch({
+      'GET /build': {
+        body: [
+          { id: 1, name: 'A', parts: {}, verify_status: 'approved', verified_videos: [...VIDEOS, { game: 'X', url: 'http://a' }, 3] },
+          { id: 2, name: 'B', parts: {}, verify_status: null },
+          { id: 3, name: 'C', parts: {}, verify_status: 'rejected', verify_reason: 'Thiếu video' },
+        ],
+      },
+    });
+    const builds = await new XanoClient({ apiUrl: API, fetch: fn, storage: auth() }).listBuilds();
+    expect(builds.map((b) => b.verify_status)).toEqual(['approved', 'none', 'rejected']);
+    expect(builds[0].verified_videos).toEqual(VIDEOS);
+    expect(builds[2].verify_reason).toBe('Thiếu video');
+  });
+
+  it('lọc bài đã xác minh và đăng bài từ build đã lưu', async () => {
+    const { fn, calls } = fakeFetch({
+      'GET /post?page=1&sort=new&verified=true': { body: { items: [{ id: 1, verified: true, videos: VIDEOS, build_id: 5 }] } },
+      'POST /post': { body: { id: 2 } },
+    });
+    const client = new XanoClient({ apiUrl: API, fetch: fn, storage: auth() });
+    const page = await client.listPosts({ verified: true });
+    expect(page.items[0]).toMatchObject({ verified: true, videos: VIDEOS, build_id: 5 });
+    await client.createPost({ title: 'abc', description: '', purpose: 'gaming', parts: {}, totalPrice: 0, buildId: 5 });
+    expect((calls[1].body as { build_id: number }).build_id).toBe(5);
+  });
+
+  it('dịch lỗi xác minh sang tiếng Việt', async () => {
+    const { fn } = fakeFetch({
+      'POST /build/5/verify': { status: 400, body: { message: 'Build nay dang cho duyet hoac da duoc xac minh.' } },
+    });
+    await expect(
+      new XanoClient({ apiUrl: API, fetch: fn, storage: auth() }).requestVerification(5, VIDEOS, ''),
+    ).rejects.toThrow('Build này đang chờ duyệt hoặc đã được xác minh.');
   });
 });
