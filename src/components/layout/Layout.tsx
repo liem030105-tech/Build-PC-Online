@@ -1,4 +1,4 @@
-import { Cpu, LogOut, User } from 'lucide-react';
+import { Cpu, LogOut, Shield, User } from 'lucide-react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router';
 import { Button } from '@/components/ui/button';
 import {
@@ -42,6 +42,12 @@ function AccountMenu() {
         <DropdownMenuLabel className="truncate font-normal text-muted-foreground">{account.email}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={() => navigate('/builds')}>Build của tôi</DropdownMenuItem>
+        {account.role === 'admin' && (
+          <DropdownMenuItem onSelect={() => navigate('/admin')}>
+            <Shield />
+            Quản trị linh kiện
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem
           onSelect={() => {
             session.logout();

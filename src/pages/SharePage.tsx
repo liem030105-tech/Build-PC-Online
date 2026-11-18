@@ -7,7 +7,7 @@ import { FpsCard } from '@/components/builder/FpsCard';
 import { PartTable } from '@/components/builder/PartTable';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { CATEGORIES, buildPrice, resolveBuild } from '@/data/parts';
+import { REQUIRED_CATEGORIES, buildItems, buildPrice, requiredCount, resolveBuild } from '@/data/parts';
 import { copyText } from '@/lib/clipboard';
 import { vnd } from '@/lib/format';
 import { decodeBuild, shareUrl } from '@/lib/shareLink';
@@ -19,7 +19,7 @@ export default function SharePage() {
   const navigate = useNavigate();
   const { build: ids, dropped } = useMemo(() => decodeBuild(params), [params]);
   const build = useMemo(() => resolveBuild(ids), [ids]);
-  const count = Object.keys(ids).length;
+  const count = buildItems(build).length;
 
   if (count === 0) {
     return (
@@ -49,7 +49,8 @@ export default function SharePage() {
           <p className="text-sm text-muted-foreground">Build được chia sẻ</p>
           <h1 className="text-3xl font-semibold tracking-tight tabular-nums">{vnd(buildPrice(ids))}</h1>
           <p className="text-sm text-muted-foreground">
-            {count}/{CATEGORIES.length} linh kiện
+            {requiredCount(build)}/{REQUIRED_CATEGORIES.length} linh kiện chính
+            {count > requiredCount(build) ? ` · ${count - requiredCount(build)} món tuỳ chọn` : ''}
             {dropped > 0 ? ` · ${dropped} linh kiện không còn trong danh mục nên đã bị bỏ` : ''}
           </p>
         </div>

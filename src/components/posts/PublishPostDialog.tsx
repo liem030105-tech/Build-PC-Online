@@ -1,5 +1,5 @@
 import { TriangleAlert } from 'lucide-react';
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -21,6 +21,8 @@ import { PURPOSES } from '@/data/purposes';
 import { useSession } from '@/hooks/useStores';
 import { errorMessage } from '@/lib/errors';
 import { vnd } from '@/lib/format';
+import { shrinkImage } from '@/lib/image';
+import { ImagePicker, type PickedImage } from './ImagePicker';
 import { checkBuild } from '@/sim/compatibility';
 
 interface Props {
@@ -41,6 +43,10 @@ export function PublishPostDialog({ ids, open, onOpenChange, defaultTitle = '' }
   const [purpose, setPurpose] = useState('gaming');
   const [description, setDescription] = useState('');
   const [sending, setSending] = useState(false);
+  const [images, setImages] = useState<PickedImage[]>([]);
+  const [progress, setProgress] = useState<string | null>(null);
+  // Ảnh đã tải xong thì nhớ đường dẫn, để bấm Đăng lại sau khi lỗi không phải tải lại.
+  const uploaded = useRef(new Map<string, string>());
 
   const check = checkBuild(resolveBuild(ids));
   const total = buildPrice(ids);
@@ -49,22 +55,38 @@ export function PublishPostDialog({ ids, open, onOpenChange, defaultTitle = '' }
     e.preventDefault();
     setSending(true);
     try {
+      const paths: string[] = [];
+      for (const [i, img] of images.entries()) {
+        let path = uploaded.current.get(img.id);
+        if (!path) {
+          setProgress(`Đang tải ảnh ${i + 1}/${images.length}…`);
+          path = await session.client.uploadImage(await shrinkImage(img.file), img.file.name.replace(/\.\w+$/, '.jpg'));
+          uploaded.current.set(img.id, path);
+        }
+        paths.push(path);
+      }
+      setProgress('Đang đăng…');
       const post = await session.client.createPost({
         title: title.trim(),
         description: description.trim(),
         purpose,
         parts: ids,
         totalPrice: total,
+        images: paths,
       });
       toast.success('Đã đăng lên cộng đồng');
       onOpenChange(false);
       setTitle('');
       setDescription('');
+      images.forEach((i) => URL.revokeObjectURL(i.preview));
+      setImages([]);
+      uploaded.current.clear();
       navigate(`/posts/${post.id}`);
     } catch (err) {
       toast.error(errorMessage(err));
     } finally {
       setSending(false);
+      setProgress(null);
     }
   }
 
@@ -78,7 +100,7 @@ export function PublishPostDialog({ ids, open, onOpenChange, defaultTitle = '' }
         onOpenChange(o);
       }}
     >
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Đăng lên cộng đồng</DialogTitle>
           <DialogDescription>
@@ -161,9 +183,13 @@ export function PublishPostDialog({ ids, open, onOpenChange, defaultTitle = '' }
                 {description.length}/{MAX_DESC}
               </p>
             </div>
+            <div className="space-y-2">
+              <Label>Ảnh máy (không bắt buộc)</Label>
+              <ImagePicker images={images} onChange={setImages} disabled={sending} />
+            </div>
             <DialogFooter>
               <Button type="submit" disabled={sending || title.trim().length < 3}>
-                {sending ? 'Đang đăng…' : 'Đăng bài'}
+                {sending ? (progress ?? 'Đang đăng…') : 'Đăng bài'}
               </Button>
             </DialogFooter>
           </form>

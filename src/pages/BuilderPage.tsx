@@ -21,7 +21,7 @@ export default function BuilderPage() {
           <ResetBuildButton className="lg:hidden" disabled={empty} onReset={() => store.reset()} />
         </div>
         <CompatibilityPanel build={build} />
-        <PartTable build={build} onChange={(c, id) => store.setSlot(c, id)} />
+        <PartTable build={build} actions={store} />
         <FpsCard build={build} />
       </div>
       <BuildSummary ids={ids} build={build} onReset={() => store.reset()} />

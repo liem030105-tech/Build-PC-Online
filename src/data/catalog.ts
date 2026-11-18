@@ -1,4 +1,4 @@
-import { CATEGORIES, type Category, type Part } from './parts';
+import { REQUIRED_CATEGORIES, RESOLUTIONS, type Category, type Part, type Resolution } from './parts';
 
 /**
  * Một dòng của bảng `part` trên Xano. Mọi loại linh kiện dùng chung bảng này;
@@ -14,6 +14,8 @@ export interface PartRow {
   has_igpu?: boolean | null;
   igpu_score?: number | null;
   game_score?: number | null;
+  /** CPU có kèm quạt trong hộp. Bỏ trống thì đoán theo TDP (≤ 65W là có). */
+  box_cooler?: boolean | null;
   ram_type?: string | null;
   form_factor?: string | null;
   total_gb?: number | null;
@@ -26,14 +28,42 @@ export interface PartRow {
   rating?: string | null;
   /** Các cỡ mainboard mà vỏ case nhận, cách nhau bằng dấu phẩy: "ATX,mATX". */
   supported?: string | null;
+  /** Case: chiều cao tản khí tối đa (mm). */
+  max_cooler_mm?: number | null;
+  /** Case: các cỡ rad lắp được, "240,280,360". */
+  radiators?: string | null;
+  /** Case: số vị trí quạt. */
+  fan_slots?: number | null;
+  /** Tản nhiệt: "air" hoặc "aio". */
+  cooler_type?: string | null;
+  /** Tản nhiệt: các socket hỗ trợ, "LGA1700,AM4,AM5". */
+  sockets?: string | null;
+  max_tdp?: number | null;
+  height_mm?: number | null;
+  radiator_mm?: number | null;
+  /** Ổ cứng thêm: "hdd" hoặc "ssd". */
+  kind?: string | null;
+  size_mm?: number | null;
+  resolution?: string | null;
+  refresh_hz?: number | null;
+  size_inch?: number | null;
+  panel?: string | null;
 }
 
-/** Đổi một linh kiện trong game thành dòng của bảng `part` (dùng khi nạp dữ liệu ban đầu). */
+/** Đổi một linh kiện thành dòng của bảng `part` (dùng khi nạp dữ liệu và ở trang quản trị). */
 export function partToRow(p: Part): PartRow {
   const base = { key: p.id, category: p.category, name: p.name, price: p.price };
   switch (p.category) {
     case 'cpu':
-      return { ...base, socket: p.socket, tdp: p.tdp, has_igpu: p.hasIGPU, igpu_score: p.igpuScore, game_score: p.gameScore };
+      return {
+        ...base,
+        socket: p.socket,
+        tdp: p.tdp,
+        has_igpu: p.hasIGPU,
+        igpu_score: p.igpuScore,
+        game_score: p.gameScore,
+        box_cooler: p.boxCooler,
+      };
     case 'mainboard':
       return { ...base, socket: p.socket, ram_type: p.ramType, form_factor: p.formFactor };
     case 'ram':
@@ -45,7 +75,28 @@ export function partToRow(p: Part): PartRow {
     case 'psu':
       return { ...base, watt: p.watt, rating: p.rating };
     case 'case':
-      return { ...base, supported: p.supported.join(',') };
+      return {
+        ...base,
+        supported: p.supported.join(','),
+        max_cooler_mm: p.maxCoolerMm ?? null,
+        radiators: p.radiators ? p.radiators.join(',') : null,
+        fan_slots: p.fanSlots ?? null,
+      };
+    case 'cooler':
+      return {
+        ...base,
+        cooler_type: p.coolerType,
+        sockets: p.sockets.join(','),
+        max_tdp: p.maxTdp,
+        height_mm: p.heightMm,
+        radiator_mm: p.radiatorMm,
+      };
+    case 'drive':
+      return { ...base, kind: p.kind, capacity_gb: p.capacityGB, power_w: p.powerW };
+    case 'fan':
+      return { ...base, size_mm: p.sizeMm, power_w: p.powerW };
+    case 'monitor':
+      return { ...base, resolution: p.resolution, refresh_hz: p.refreshHz, size_inch: p.sizeInch, panel: p.panel };
   }
 }
 
@@ -55,6 +106,11 @@ const positive = (v: unknown): number | null => {
   const n = num(v);
   return n !== null && n > 0 ? n : null;
 };
+const list = (v: unknown): string[] =>
+  (text(v) ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
 
 /**
  * Đổi một dòng của bảng `part` thành linh kiện. Trả về null nếu dòng thiếu
@@ -79,7 +135,8 @@ export function rowToPart(raw: unknown): Part | null {
       const igpuScore = Math.max(0, num(row.igpu_score) ?? 0);
       // Có iGPU khi cột has_igpu bật, hoặc khi có điểm iGPU mà quên bật cột đó.
       const hasIGPU = row.has_igpu === true || (row.has_igpu == null && igpuScore > 0);
-      return { ...base, category, socket, tdp, hasIGPU, igpuScore: hasIGPU ? igpuScore : 0, gameScore };
+      const boxCooler = typeof row.box_cooler === 'boolean' ? row.box_cooler : tdp <= 65;
+      return { ...base, category, socket, tdp, hasIGPU, igpuScore: hasIGPU ? igpuScore : 0, gameScore, boxCooler };
     }
     case 'mainboard': {
       const socket = text(row.socket);
@@ -112,12 +169,57 @@ export function rowToPart(raw: unknown): Part | null {
       return { ...base, category, watt, rating: text(row.rating) ?? '' };
     }
     case 'case': {
-      const supported = (text(row.supported) ?? '')
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean);
+      const supported = list(row.supported);
       if (supported.length === 0) return null;
-      return { ...base, category, supported };
+      const radiators =
+        text(row.radiators) === null
+          ? undefined
+          : list(row.radiators)
+              .map(Number)
+              .filter((n) => n > 0);
+      return {
+        ...base,
+        category,
+        supported,
+        maxCoolerMm: positive(row.max_cooler_mm) ?? undefined,
+        radiators,
+        fanSlots: positive(row.fan_slots) ?? undefined,
+      };
+    }
+    case 'cooler': {
+      const coolerType = text(row.cooler_type)?.toLowerCase();
+      const sockets = list(row.sockets);
+      const maxTdp = positive(row.max_tdp);
+      if ((coolerType !== 'air' && coolerType !== 'aio') || sockets.length === 0 || !maxTdp) return null;
+      const heightMm = positive(row.height_mm) ?? 0;
+      const radiatorMm = positive(row.radiator_mm) ?? 0;
+      if (coolerType === 'air' ? !heightMm : !radiatorMm) return null;
+      return { ...base, category, coolerType, sockets, maxTdp, heightMm, radiatorMm };
+    }
+    case 'drive': {
+      const kind = text(row.kind)?.toLowerCase();
+      const capacityGB = positive(row.capacity_gb);
+      if ((kind !== 'hdd' && kind !== 'ssd') || !capacityGB) return null;
+      return { ...base, category, kind, capacityGB, powerW: Math.max(0, num(row.power_w) ?? 0) };
+    }
+    case 'fan': {
+      const sizeMm = positive(row.size_mm);
+      if (!sizeMm) return null;
+      return { ...base, category, sizeMm, powerW: Math.max(0, num(row.power_w) ?? 0) };
+    }
+    case 'monitor': {
+      const res = text(row.resolution)?.toLowerCase();
+      const resolution = RESOLUTIONS.find((r) => r.toLowerCase() === res) as Resolution | undefined;
+      const refreshHz = positive(row.refresh_hz);
+      if (!resolution || !refreshHz) return null;
+      return {
+        ...base,
+        category,
+        resolution,
+        refreshHz,
+        sizeInch: positive(row.size_inch) ?? 0,
+        panel: text(row.panel) ?? '',
+      };
     }
     default:
       return null;
@@ -128,7 +230,7 @@ export interface CatalogResult {
   parts: Part[];
   /** Số dòng bị bỏ qua vì thiếu thông số hoặc trùng key. */
   skipped: number;
-  /** Các loại linh kiện không có món hợp lệ nào. Khác rỗng thì danh mục không chơi được. */
+  /** Các loại BẮT BUỘC không có món hợp lệ nào. Khác rỗng thì danh mục không dùng được. */
   missing: Category[];
 }
 
@@ -146,6 +248,7 @@ export function rowsToCatalog(rows: unknown): CatalogResult {
     seen.add(part.id);
     parts.push(part);
   }
-  const missing = CATEGORIES.map((c) => c.id).filter((id) => !parts.some((p) => p.category === id));
+  // Loại tuỳ chọn (tản, ổ thêm, quạt, màn hình) có thể chưa có trên máy chủ.
+  const missing = REQUIRED_CATEGORIES.filter((id) => !parts.some((p) => p.category === id));
   return { parts, skipped, missing };
 }

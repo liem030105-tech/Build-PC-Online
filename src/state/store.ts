@@ -1,4 +1,11 @@
-import { CATEGORIES, PART_BY_ID, type BuildIds, type Category } from '../data/parts';
+import {
+  MAX_DRIVES,
+  MAX_FANS,
+  PART_BY_ID,
+  sanitizeIds,
+  type BuildIds,
+  type SingleCategory,
+} from '../data/parts';
 
 // Giữ key cũ để người dùng không mất cấu hình đang ráp; các trường cũ khác bị bỏ qua.
 const KEY = 'buildpc-save-v1';
@@ -8,20 +15,10 @@ export interface BuildState {
   build: BuildIds;
 }
 
-const empty = (): BuildState => ({ build: {} });
+/** Chỉ giữ lại id có thật và đúng loại (xem sanitizeIds). */
+export const sanitize = sanitizeIds;
 
-/** Chỉ giữ lại các khe trỏ tới linh kiện có thật và đúng loại. Trả về cả số khe bị bỏ. */
-export function sanitize(ids: BuildIds | undefined): { build: BuildIds; dropped: number } {
-  const build: BuildIds = {};
-  let dropped = 0;
-  for (const c of CATEGORIES) {
-    const id = ids?.[c.id];
-    if (!id) continue;
-    if (typeof id === 'string' && PART_BY_ID.get(id)?.category === c.id) build[c.id] = id;
-    else dropped++;
-  }
-  return { build, dropped };
-}
+const empty = (): BuildState => ({ build: {} });
 
 function load(): BuildState {
   try {
@@ -60,17 +57,48 @@ export const store = {
     listeners.forEach((fn) => fn());
   },
 
+  /** Lọc lại build theo danh mục hiện tại (sau khi trang quản trị đổi danh mục). */
+  resanitize() {
+    commit({ build: sanitize(this.state.build).build });
+  },
+
   subscribe(fn: Listener): () => void {
     listeners.add(fn);
     return () => listeners.delete(fn);
   },
 
   /** Chọn một linh kiện cho loại tương ứng, hoặc bỏ chọn (id = null). */
-  setSlot(category: Category, id: string | null) {
+  setSlot(category: SingleCategory, id: string | null) {
     if (id && PART_BY_ID.get(id)?.category !== category) return;
     const build = { ...this.state.build };
     if (id) build[category] = id;
     else delete build[category];
+    commit({ build });
+  },
+
+  /** Thêm một ổ cứng thêm (tối đa MAX_DRIVES). */
+  addDrive(id: string) {
+    const drives = this.state.build.drive ?? [];
+    if (drives.length >= MAX_DRIVES || PART_BY_ID.get(id)?.category !== 'drive') return;
+    commit({ build: { ...this.state.build, drive: [...drives, id] } });
+  },
+
+  /** Bỏ ổ cứng thêm ở vị trí `index`. */
+  removeDrive(index: number) {
+    const drives = (this.state.build.drive ?? []).filter((_, i) => i !== index);
+    const build: BuildIds = { ...this.state.build, drive: drives };
+    if (!drives.length) delete build.drive;
+    commit({ build });
+  },
+
+  /** Chọn mẫu quạt và số lượng, hoặc bỏ quạt (id = null). */
+  setFan(id: string | null, qty?: number) {
+    const build = { ...this.state.build };
+    const n = qty ?? build.fan?.qty ?? 1;
+    if (!id) delete build.fan;
+    else if (PART_BY_ID.get(id)?.category === 'fan') {
+      build.fan = { id, qty: Math.min(MAX_FANS, Math.max(1, Math.round(n))) };
+    } else return;
     commit({ build });
   },
 

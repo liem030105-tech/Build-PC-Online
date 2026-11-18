@@ -50,7 +50,9 @@ function PickerBody({ category, build, onPick }: { category: Category; build: Bu
   const [sort, setSort] = useState<Sort>('price-asc');
   const [onlyCompatible, setOnlyCompatible] = useState(true);
   const meta = CATEGORY_BY_ID[category];
-  const selectedId = build[category]?.id;
+  // Ổ cứng thêm được chọn trùng mẫu (2 ổ giống nhau), nên không đánh dấu "Đang chọn".
+  const selectedId =
+    category === 'drive' ? undefined : category === 'fan' ? build.fan?.part.id : build[category]?.id;
 
   const { items, hidden } = useMemo(() => {
     const q = fold(query.trim());

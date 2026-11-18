@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { GAMES } from '@/data/games';
 import type { Build } from '@/data/parts';
 import { cn } from '@/lib/utils';
-import { estimateFps } from '@/sim/fps';
+import { buildResolution, estimateFps } from '@/sim/fps';
 
 function fpsTone(fps: number): string {
   if (fps >= 144) return 'text-emerald-600 dark:text-emerald-400';
@@ -11,10 +11,12 @@ function fpsTone(fps: number): string {
   return 'text-destructive';
 }
 
-/** FPS ước tính ở 1080p cho từng game, tính từ CPU, RAM và card đồ họa. */
+/** FPS ước tính cho từng game theo độ phân giải màn hình (mặc định 1080p). */
 export function FpsCard({ build }: { build: Build }) {
   const results = GAMES.map((g) => ({ game: g, fps: estimateFps(build, g) }));
   const ready = results.some((r) => r.fps);
+  const resolution = buildResolution(build);
+  const hz = build.monitor?.refreshHz;
 
   return (
     <Card>
@@ -25,7 +27,7 @@ export function FpsCard({ build }: { build: Build }) {
         </CardTitle>
         <CardDescription>
           {ready
-            ? 'Ở 1080p. Số liệu mô phỏng để so sánh cấu hình, không phải benchmark thực tế.'
+            ? `Ở ${resolution}${build.monitor ? ` theo màn hình ${build.monitor.name}` : ' (chọn màn hình để tính theo độ phân giải khác)'}. Số liệu mô phỏng để so sánh cấu hình, không phải benchmark thực tế.`
             : 'Chọn CPU, RAM và card đồ họa (hoặc CPU có đồ họa tích hợp) để xem ước tính.'}
         </CardDescription>
       </CardHeader>
@@ -40,6 +42,16 @@ export function FpsCard({ build }: { build: Build }) {
                   <span className="ml-1 text-sm font-normal text-muted-foreground">FPS</span>
                 </div>
                 <div className="text-xs text-muted-foreground tabular-nums">1% low: {fps.low1}</div>
+                {hz && (
+                  <div
+                    className={cn(
+                      'mt-1 text-xs',
+                      fps.avg >= hz ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400',
+                    )}
+                  >
+                    {fps.avg >= hz ? `Đủ cho màn ${hz}Hz` : `Dưới ${hz}Hz của màn hình`}
+                  </div>
+                )}
               </>
             ) : (
               <div className="mt-1 text-2xl font-semibold text-muted-foreground/50">—</div>

@@ -1,9 +1,12 @@
+import type { PartRow } from '../data/catalog';
 import type { BuildIds } from '../data/parts';
 
 export interface Account {
   id: number;
   name: string;
   email: string;
+  /** "admin" được sửa danh mục linh kiện; còn lại là "user". */
+  role: string;
 }
 
 /** Một build đã lưu trên Xano (bảng `build`). */
@@ -32,6 +35,8 @@ export interface Post {
   total_price: number;
   like_count: number;
   comment_count: number;
+  /** Đường dẫn ảnh trên Xano (/vault/...), ảnh đầu là ảnh bìa. Dùng mediaUrl() để ra link đầy đủ. */
+  images: string[];
 }
 
 export interface PostComment {
@@ -63,6 +68,8 @@ export interface NewPost {
   purpose: string;
   parts: BuildIds;
   totalPrice: number;
+  /** Đường dẫn ảnh đã tải lên bằng uploadImage(), tối đa 4. */
+  images?: string[];
 }
 
 export class XanoError extends Error {
@@ -143,7 +150,21 @@ export class XanoClient {
 
   async me(): Promise<Account> {
     const me = await this.request<Account>(this.authUrl, 'GET', '/auth/me');
-    return { id: me.id, name: me.name, email: me.email };
+    return { id: me.id, name: me.name, email: me.email, role: me.role === 'admin' ? 'admin' : 'user' };
+  }
+
+  /** Thêm linh kiện vào danh mục (chỉ admin). Trả về dòng thô vừa tạo. */
+  async createPart(row: PartRow): Promise<Record<string, unknown>> {
+    return this.request(this.apiUrl, 'POST', '/part', row);
+  }
+
+  /** Sửa linh kiện có id `id` trong bảng `part` (chỉ admin). Gửi đủ mọi cột; cột không có thì bị xoá. */
+  async updatePart(id: number, row: PartRow): Promise<Record<string, unknown>> {
+    return this.request(this.apiUrl, 'PATCH', `/part/${id}`, row);
+  }
+
+  async deletePart(id: number): Promise<void> {
+    await this.request<unknown>(this.apiUrl, 'DELETE', `/part/${id}`);
   }
 
   logout() {
@@ -205,6 +226,7 @@ export class XanoClient {
       purpose: input.purpose,
       parts: input.parts,
       total_price: input.totalPrice,
+      images: input.images ?? [],
     });
     return normalizePost(row);
   }
@@ -239,6 +261,26 @@ export class XanoClient {
     await this.request<unknown>(this.apiUrl, 'DELETE', `/comment/${id}`);
   }
 
+  /** Tải một ảnh lên kho của Xano. Trả về đường dẫn `/vault/...` để gắn vào bài đăng. */
+  async uploadImage(image: Blob, filename = 'anh.jpg'): Promise<string> {
+    const form = new FormData();
+    form.append('image', image, filename);
+    const res = await this.request<{ path?: unknown }>(this.apiUrl, 'POST', '/upload/image', form);
+    if (typeof res?.path !== 'string' || !res.path.startsWith('/')) {
+      throw new XanoError('Máy chủ không trả về đường dẫn ảnh.', 0);
+    }
+    return res.path;
+  }
+
+  /** Link đầy đủ tới một ảnh trong kho Xano (cùng máy chủ với API). */
+  mediaUrl(path: string): string {
+    try {
+      return new URL(path, new URL(this.apiUrl).origin).toString();
+    } catch {
+      return path;
+    }
+  }
+
   private setToken(token: string | null) {
     this.token = token;
     try {
@@ -253,7 +295,8 @@ export class XanoClient {
     if (!this.configured) throw new XanoError('Chưa cấu hình địa chỉ API Xano.', 0);
 
     const headers: Record<string, string> = { Accept: 'application/json' };
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
+    const form = typeof FormData !== 'undefined' && body instanceof FormData;
+    if (body !== undefined && !form) headers['Content-Type'] = 'application/json';
     if (this.token) headers.Authorization = `Bearer ${this.token}`;
 
     let res: Response;
@@ -261,7 +304,7 @@ export class XanoClient {
       res = await this.fetchFn(base + path, {
         method,
         headers,
-        body: body === undefined ? undefined : JSON.stringify(body),
+        body: body === undefined ? undefined : form ? (body as FormData) : JSON.stringify(body),
       });
     } catch {
       throw new XanoError('Không kết nối được tới máy chủ. Kiểm tra mạng rồi thử lại.', 0);
@@ -296,6 +339,11 @@ const MESSAGES: Record<string, string> = {
   'Day khong phai bai dang cua ban.': 'Đây không phải bài đăng của bạn.',
   'Khong tim thay binh luan.': 'Không tìm thấy bình luận. Có thể đã bị xoá.',
   'Ban khong co quyen xoa binh luan nay.': 'Bạn không có quyền xoá bình luận này.',
+  'Chi admin moi duoc sua danh muc linh kien.': 'Chỉ admin mới được sửa danh mục linh kiện.',
+  'Ma linh kien da ton tai.': 'Mã linh kiện đã tồn tại, hãy chọn mã khác.',
+  'Khong tim thay linh kien.': 'Không tìm thấy linh kiện. Có thể đã bị xoá.',
+  'Toi da 4 anh moi bai dang.': 'Mỗi bài đăng tối đa 4 ảnh.',
+  'Anh khong hop le.': 'Ảnh không hợp lệ, hãy tải lại ảnh.',
 };
 
 function translate(status: number, message: string): string {
@@ -322,6 +370,7 @@ function normalizePost(row: Post): Post {
     total_price: num(row?.total_price),
     like_count: num(row?.like_count),
     comment_count: num(row?.comment_count),
+    images: Array.isArray(row?.images) ? row.images.filter((p): p is string => typeof p === "string" && p.startsWith("/")).slice(0, 4) : [],
   };
 }
 

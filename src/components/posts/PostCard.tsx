@@ -6,6 +6,7 @@ import { PART_BY_ID } from '@/data/parts';
 import { purposeLabel } from '@/data/purposes';
 import { formatDate, vnd } from '@/lib/format';
 import type { Post } from '@/net/xano';
+import { session } from '@/state/session';
 import { LikeButton } from './LikeButton';
 
 /** Thẻ tóm tắt bài đăng trong lưới Cộng đồng; bấm vào thẻ để mở chi tiết. */
@@ -17,6 +18,14 @@ export function PostCard({ post }: { post: Post }) {
 
   return (
     <Card className="relative transition-colors hover:border-foreground/20">
+      {post.images[0] && (
+        <img
+          src={session.client.mediaUrl(post.images[0])}
+          alt=""
+          loading="lazy"
+          className="aspect-video w-full bg-muted object-cover"
+        />
+      )}
       <CardHeader>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Badge variant="secondary">{purposeLabel(post.purpose)}</Badge>

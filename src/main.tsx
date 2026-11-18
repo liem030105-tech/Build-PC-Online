@@ -1,7 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
-import { CatalogContext } from './hooks/useCatalog';
+import { CatalogProvider } from './hooks/useCatalog';
 import { loadCatalog } from './state/catalog';
 import { session } from './state/session';
 import { store } from './state/store';
@@ -28,9 +28,9 @@ async function start() {
 
   root.render(
     <StrictMode>
-      <CatalogContext.Provider value={catalog}>
+      <CatalogProvider initial={catalog}>
         <App />
-      </CatalogContext.Provider>
+      </CatalogProvider>
     </StrictMode>,
   );
 }

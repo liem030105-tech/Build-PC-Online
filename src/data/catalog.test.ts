@@ -35,7 +35,7 @@ describe('rowToPart', () => {
   it('đọc dòng CPU từ Xano', () => {
     const row = xanoRow({ key: 'cpu-x', category: 'cpu', name: 'CPU X', price: 100, socket: 'AM5', tdp: 65, has_igpu: true, igpu_score: 8, game_score: 135 });
     expect(rowToPart(row)).toEqual({
-      id: 'cpu-x', category: 'cpu', name: 'CPU X', price: 100, socket: 'AM5', tdp: 65, hasIGPU: true, igpuScore: 8, gameScore: 135,
+      id: 'cpu-x', category: 'cpu', name: 'CPU X', price: 100, socket: 'AM5', tdp: 65, hasIGPU: true, igpuScore: 8, gameScore: 135, boxCooler: true,
     });
   });
 
@@ -104,5 +104,49 @@ describe('rowsToCatalog', () => {
     const result = rowsToCatalog({ message: 'error' });
     expect(result.parts).toEqual([]);
     expect(result.missing).toHaveLength(7);
+  });
+});
+
+describe('rowToPart: linh kiện tuỳ chọn và cột mới', () => {
+  it('đoán CPU kèm quạt theo TDP khi bỏ trống cột box_cooler', () => {
+    const base = { category: 'cpu', name: 'C', price: 1, socket: 'AM5', game_score: 100 };
+    expect(rowToPart(xanoRow({ ...base, key: 'a', tdp: 65 }))).toMatchObject({ boxCooler: true });
+    expect(rowToPart(xanoRow({ ...base, key: 'b', tdp: 120 }))).toMatchObject({ boxCooler: false });
+    expect(rowToPart(xanoRow({ ...base, key: 'c', tdp: 120, box_cooler: true }))).toMatchObject({ boxCooler: true });
+  });
+
+  it('đọc thông số tản nhiệt của case', () => {
+    const part = rowToPart(
+      xanoRow({ key: 'cs', category: 'case', name: 'C', price: 1, supported: 'ATX', max_cooler_mm: 160, radiators: '240, 360', fan_slots: 7 }),
+    );
+    expect(part).toMatchObject({ maxCoolerMm: 160, radiators: [240, 360], fanSlots: 7 });
+  });
+
+  it('đọc tản khí, tản nước, ổ thêm, quạt, màn hình', () => {
+    const air = rowToPart(xanoRow({ key: 'c1', category: 'cooler', name: 'A', price: 1, cooler_type: 'AIR', sockets: 'AM5,LGA1700', max_tdp: 200, height_mm: 150 }));
+    const aio = rowToPart(xanoRow({ key: 'c2', category: 'cooler', name: 'B', price: 1, cooler_type: 'aio', sockets: 'AM5', max_tdp: 300, radiator_mm: 240 }));
+    const drive = rowToPart(xanoRow({ key: 'd', category: 'drive', name: 'D', price: 1, kind: 'HDD', capacity_gb: 2000, power_w: 7 }));
+    const fan = rowToPart(xanoRow({ key: 'f', category: 'fan', name: 'F', price: 1, size_mm: 140 }));
+    const mon = rowToPart(xanoRow({ key: 'm', category: 'monitor', name: 'M', price: 1, resolution: '4k', refresh_hz: 144, size_inch: 27, panel: 'IPS' }));
+    expect(air).toMatchObject({ coolerType: 'air', sockets: ['AM5', 'LGA1700'], heightMm: 150, radiatorMm: 0 });
+    expect(aio).toMatchObject({ coolerType: 'aio', radiatorMm: 240 });
+    expect(drive).toMatchObject({ kind: 'hdd', capacityGB: 2000, powerW: 7 });
+    expect(fan).toMatchObject({ sizeMm: 140, powerW: 0 });
+    expect(mon).toMatchObject({ resolution: '4K', refreshHz: 144 });
+  });
+
+  it('bỏ dòng tuỳ chọn thiếu thông số bắt buộc', () => {
+    expect(rowToPart(xanoRow({ key: 'c', category: 'cooler', name: 'A', price: 1, cooler_type: 'air', sockets: 'AM5', max_tdp: 200 }))).toBeNull();
+    expect(rowToPart(xanoRow({ key: 'm', category: 'monitor', name: 'M', price: 1, resolution: '8K', refresh_hz: 60 }))).toBeNull();
+    expect(rowToPart(xanoRow({ key: 'd', category: 'drive', name: 'D', price: 1, kind: 'nvme', capacity_gb: 1 }))).toBeNull();
+  });
+
+  it('mọi linh kiện đi kèm đổi qua lại dòng Xano không mất thông tin', () => {
+    for (const p of BUILTIN_PARTS) expect(rowToPart(xanoRow({ ...partToRow(p) }))).toEqual(p);
+  });
+
+  it('danh mục máy chủ chưa có loại tuỳ chọn vẫn dùng được', () => {
+    const rows = BUILTIN_PARTS.filter((p) => !['cooler', 'drive', 'fan', 'monitor'].includes(p.category)).map(partToRow);
+    expect(rowsToCatalog(rows).missing).toEqual([]);
   });
 });

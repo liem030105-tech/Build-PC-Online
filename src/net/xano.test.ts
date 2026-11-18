@@ -54,7 +54,7 @@ describe('XanoClient', () => {
 
     const account = await client.login('a@b.c', 'secret');
 
-    expect(account).toEqual({ id: 7, name: 'Tester', email: 'a@b.c' });
+    expect(account).toEqual({ id: 7, name: 'Tester', email: 'a@b.c', role: 'user' });
     expect(calls[0].body).toEqual({ email: 'a@b.c', password: 'secret' });
     expect(calls[0].headers.Authorization).toBeUndefined();
     expect(calls[1].headers.Authorization).toBe('Bearer tok-1');
@@ -177,6 +177,7 @@ describe('XanoClient: bài đăng cộng đồng', () => {
     total_price: 5200000,
     like_count: 2,
     comment_count: 1,
+    images: [] as string[],
   };
 
   it('lấy danh sách bài không cần đăng nhập, gửi trang, sắp xếp và nhu cầu', async () => {
@@ -236,6 +237,7 @@ describe('XanoClient: bài đăng cộng đồng', () => {
       purpose: 'gaming',
       parts: { cpu: 'cpu-7600' },
       total_price: 5200000,
+      images: [],
     });
   });
 
@@ -283,5 +285,69 @@ describe('XanoClient: bài đăng cộng đồng', () => {
     const client = new XanoClient({ apiUrl: API, fetch: fn, storage: memoryStorage() });
 
     await expect(client.listPosts()).rejects.toThrow('Máy chủ đang quá tải');
+  });
+});
+
+describe('XanoClient: quản trị linh kiện', () => {
+  const ROW = { key: 'fan-x', category: 'fan', name: 'Quạt X', price: 100000, size_mm: 120, power_w: 2 };
+
+  it('đọc quyền admin từ auth/me, giá trị lạ coi là user', async () => {
+    const admin = fakeFetch({ 'GET /auth/me': { body: { ...ME, role: 'admin' } } });
+    expect((await new XanoClient({ apiUrl: API, fetch: admin.fn, storage: memoryStorage() }).me()).role).toBe('admin');
+    const odd = fakeFetch({ 'GET /auth/me': { body: { ...ME, role: 'superuser' } } });
+    expect((await new XanoClient({ apiUrl: API, fetch: odd.fn, storage: memoryStorage() }).me()).role).toBe('user');
+  });
+
+  it('thêm, sửa, xoá linh kiện gọi đúng đường dẫn và gửi cả dòng', async () => {
+    const { fn, calls } = fakeFetch({
+      'POST /part': { body: { id: 31, ...ROW } },
+      'PATCH /part/31': { body: { id: 31, ...ROW, price: 90000 } },
+      'DELETE /part/31': {},
+    });
+    const client = new XanoClient({ apiUrl: API, fetch: fn, storage: memoryStorage({ 'buildpc-auth-token': 't' }) });
+
+    expect(await client.createPart(ROW)).toMatchObject({ id: 31 });
+    await client.updatePart(31, { ...ROW, price: 90000 });
+    await client.deletePart(31);
+    expect(calls.map((c) => `${c.method} ${c.url.replace(API, '')}`)).toEqual(['POST /part', 'PATCH /part/31', 'DELETE /part/31']);
+    expect(calls[1].body).toEqual({ ...ROW, price: 90000 });
+  });
+
+  it('báo lỗi tiếng Việt khi không phải admin', async () => {
+    const { fn } = fakeFetch({ 'POST /part': { status: 403, body: { message: 'Chi admin moi duoc sua danh muc linh kien.' } } });
+    const client = new XanoClient({ apiUrl: API, fetch: fn, storage: memoryStorage({ 'buildpc-auth-token': 't' }) });
+    await expect(client.createPart(ROW)).rejects.toThrow('Chỉ admin mới được sửa danh mục linh kiện.');
+  });
+});
+
+describe('XanoClient: ảnh bài đăng', () => {
+  it('tải ảnh bằng FormData, không ép Content-Type JSON, trả về đường dẫn', async () => {
+    const calls: { body: unknown; headers: Record<string, string> }[] = [];
+    const fn = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ body: init?.body, headers: init?.headers as Record<string, string> });
+      return new Response(JSON.stringify({ path: '/vault/abc/anh.jpg', meta: { width: 10 } }), { status: 200 });
+    }) as typeof fetch;
+    const client = new XanoClient({ apiUrl: API, fetch: fn, storage: memoryStorage({ 'buildpc-auth-token': 't' }) });
+
+    expect(await client.uploadImage(new Blob(['x'], { type: 'image/jpeg' }))).toBe('/vault/abc/anh.jpg');
+    expect(calls[0].body).toBeInstanceOf(FormData);
+    expect(calls[0].headers['Content-Type']).toBeUndefined();
+    expect(calls[0].headers.Authorization).toBe('Bearer t');
+  });
+
+  it('ghép link ảnh đầy đủ theo máy chủ API, chỉ giữ đường dẫn hợp lệ trong bài', async () => {
+    const { fn } = fakeFetch({
+      'GET /post/1': { body: { post: { id: 1, title: 'A', images: ['/vault/a.jpg', 'http://la.com/x.jpg', 5] }, comments: [] } },
+    });
+    const client = new XanoClient({ apiUrl: API, fetch: fn, storage: memoryStorage() });
+    expect(client.mediaUrl('/vault/a.jpg')).toBe('https://example.xano.io/vault/a.jpg');
+    expect((await client.getPost(1)).images).toEqual(['/vault/a.jpg']);
+  });
+
+  it('đăng bài gửi kèm danh sách ảnh', async () => {
+    const { fn, calls } = fakeFetch({ 'POST /post': { body: { id: 2 } } });
+    const client = new XanoClient({ apiUrl: API, fetch: fn, storage: memoryStorage({ 'buildpc-auth-token': 't' }) });
+    await client.createPost({ title: 'abc', description: '', purpose: 'gaming', parts: {}, totalPrice: 0, images: ['/vault/a.jpg'] });
+    expect((calls[0].body as { images: string[] }).images).toEqual(['/vault/a.jpg']);
   });
 });

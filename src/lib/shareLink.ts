@@ -1,12 +1,20 @@
-import { CATEGORIES, type BuildIds } from '../data/parts';
-import { sanitize } from '../state/store';
+import { CATEGORIES, sanitizeIds, type BuildIds } from '../data/parts';
 
-/** Query string mô tả build, ví dụ `cpu=cpu-5600&gpu=gpu-3060`. Thứ tự theo CATEGORIES. */
+/**
+ * Query string mô tả build, ví dụ `cpu=cpu-5600&gpu=gpu-3060&drive=a,b&fan=fan-p12*3`.
+ * Thứ tự theo CATEGORIES.
+ */
 export function encodeBuild(ids: BuildIds): string {
   const params = new URLSearchParams();
   for (const c of CATEGORIES) {
-    const id = ids[c.id];
-    if (id) params.set(c.id, id);
+    if (c.id === 'drive') {
+      if (ids.drive?.length) params.set('drive', ids.drive.join(','));
+    } else if (c.id === 'fan') {
+      if (ids.fan) params.set('fan', `${ids.fan.id}*${ids.fan.qty}`);
+    } else {
+      const id = ids[c.id];
+      if (id) params.set(c.id, id);
+    }
   }
   return params.toString();
 }
@@ -17,12 +25,17 @@ export function encodeBuild(ids: BuildIds): string {
  */
 export function decodeBuild(search: string | URLSearchParams): { build: BuildIds; dropped: number } {
   const params = typeof search === 'string' ? new URLSearchParams(search) : search;
-  const raw: BuildIds = {};
+  const raw: Record<string, unknown> = {};
   for (const c of CATEGORIES) {
-    const id = params.get(c.id);
-    if (id) raw[c.id] = id;
+    const value = params.get(c.id);
+    if (!value) continue;
+    if (c.id === 'drive') raw.drive = value.split(',').filter(Boolean);
+    else if (c.id === 'fan') {
+      const [id, qty] = value.split('*');
+      raw.fan = { id, qty: Number(qty) || 1 };
+    } else raw[c.id] = value;
   }
-  return sanitize(raw);
+  return sanitizeIds(raw);
 }
 
 /** Link tuyệt đối tới trang xem build. */

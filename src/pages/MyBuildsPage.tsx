@@ -18,7 +18,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { CATEGORIES, PART_BY_ID } from '@/data/parts';
+import { PART_BY_ID, REQUIRED_CATEGORIES, requiredCount, resolveBuild } from '@/data/parts';
 import { useSession } from '@/hooks/useStores';
 import { copyText } from '@/lib/clipboard';
 import { errorMessage } from '@/lib/errors';
@@ -40,7 +40,7 @@ function BuildCard({ b, onDelete }: { b: SavedBuild; onDelete: (b: SavedBuild) =
   const navigate = useNavigate();
   const [publishOpen, setPublishOpen] = useState(false);
   const name = (id?: string) => (id ? PART_BY_ID.get(id)?.name : undefined);
-  const count = CATEGORIES.filter((c) => PART_BY_ID.get(b.parts[c.id] ?? '')).length;
+  const count = requiredCount(resolveBuild(b.parts));
 
   function open() {
     const dropped = store.loadBuild(b.parts);
@@ -53,7 +53,7 @@ function BuildCard({ b, onDelete }: { b: SavedBuild; onDelete: (b: SavedBuild) =
       <CardHeader>
         <CardTitle className="truncate">{b.name || 'Build không tên'}</CardTitle>
         <CardDescription>
-          Lưu ngày {formatDate(b.created_at)} · {count}/{CATEGORIES.length} linh kiện
+          Lưu ngày {formatDate(b.created_at)} · {count}/{REQUIRED_CATEGORIES.length} linh kiện chính
         </CardDescription>
       </CardHeader>
       <CardContent className="flex-1 space-y-1 text-sm">

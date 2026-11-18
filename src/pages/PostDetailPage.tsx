@@ -7,6 +7,7 @@ import { FpsCard } from '@/components/builder/FpsCard';
 import { PartTable } from '@/components/builder/PartTable';
 import { CommentSection } from '@/components/posts/CommentSection';
 import { LikeButton } from '@/components/posts/LikeButton';
+import { PostGallery } from '@/components/posts/PostGallery';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
   AlertDialog,
@@ -172,6 +173,8 @@ export default function PostDetailPage() {
           <p className="max-w-3xl text-sm leading-relaxed break-words whitespace-pre-line">{post.description}</p>
         )}
       </div>
+
+      <PostGallery urls={post.images.map((p) => session.client.mediaUrl(p))} title={post.title} />
 
       <CompatibilityPanel build={build} />
       <PartTable build={build} />

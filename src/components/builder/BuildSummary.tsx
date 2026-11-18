@@ -15,7 +15,14 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { CATEGORIES, buildPrice, type Build, type BuildIds } from '@/data/parts';
+import {
+  REQUIRED_CATEGORIES,
+  buildItems,
+  buildPrice,
+  requiredCount,
+  type Build,
+  type BuildIds,
+} from '@/data/parts';
 import { copyText } from '@/lib/clipboard';
 import { vnd } from '@/lib/format';
 import { shareUrl } from '@/lib/shareLink';
@@ -94,8 +101,8 @@ export function BuildSummary({ ids, build, onReset }: Props) {
   const [saveOpen, setSaveOpen] = useState(false);
   const [publishOpen, setPublishOpen] = useState(false);
   const total = buildPrice(ids);
-  const count = CATEGORIES.filter((c) => build[c.id]).length;
-  const empty = count === 0;
+  const count = requiredCount(build);
+  const empty = buildItems(build).length === 0;
 
   const actions = (
     <>
@@ -125,7 +132,7 @@ export function BuildSummary({ ids, build, onReset }: Props) {
           <div>
             <div className="text-3xl font-semibold tracking-tight tabular-nums">{vnd(total)}</div>
             <div className="text-sm text-muted-foreground">
-              {count}/{CATEGORIES.length} linh kiện
+              {count}/{REQUIRED_CATEGORIES.length} linh kiện chính
             </div>
           </div>
           <Separator />
@@ -142,7 +149,7 @@ export function BuildSummary({ ids, build, onReset }: Props) {
           <div className="min-w-0 flex-1">
             <div className="truncate text-lg font-semibold tabular-nums">{vnd(total)}</div>
             <div className="text-xs text-muted-foreground">
-              {count}/{CATEGORIES.length} linh kiện
+              {count}/{REQUIRED_CATEGORIES.length} linh kiện chính
               {build.cpu ? ` · cần ${requiredWatt(build)}W` : ''}
             </div>
           </div>
