@@ -1,40 +1,31 @@
-import type { GameId } from '../data/games';
-import { CATEGORIES, PART_BY_ID, type BuildIds, type Category } from '../data/parts';
+import {
+  MAX_DRIVES,
+  MAX_FANS,
+  PART_BY_ID,
+  sanitizeIds,
+  type BuildIds,
+  type SingleCategory,
+} from '../data/parts';
 
+// Giữ key cũ để người dùng không mất cấu hình đang ráp; các trường cũ khác bị bỏ qua.
 const KEY = 'buildpc-save-v1';
 
-export interface GameState {
-  /** Linh kiện đang lắp vào từng khe, chọn thẳng từ danh mục. */
+export interface BuildState {
+  /** Linh kiện đang chọn cho từng loại. */
   build: BuildIds;
-  /** PC đã được khởi động thành công với cấu hình hiện tại. */
-  pcBuilt: boolean;
-  game: GameId | null;
 }
 
-const empty = (): GameState => ({ build: {}, pcBuilt: false, game: null });
+/** Chỉ giữ lại id có thật và đúng loại (xem sanitizeIds). */
+export const sanitize = sanitizeIds;
 
-/** Chỉ giữ lại các khe trỏ tới linh kiện có thật và đúng loại. Trả về cả số khe bị bỏ. */
-function sanitize(ids: BuildIds | undefined): { build: BuildIds; dropped: number } {
-  const build: BuildIds = {};
-  let dropped = 0;
-  for (const c of CATEGORIES) {
-    const id = ids?.[c.id];
-    if (!id) continue;
-    if (typeof id === 'string' && PART_BY_ID.get(id)?.category === c.id) build[c.id] = id;
-    else dropped++;
-  }
-  return { build, dropped };
-}
+const empty = (): BuildState => ({ build: {} });
 
-function load(): GameState {
+function load(): BuildState {
   try {
     const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(KEY) : null;
     if (!raw) return empty();
-    const data = JSON.parse(raw) as Partial<GameState>;
-    const { build, dropped } = sanitize(data.build);
-    // Linh kiện đang lắp bị gỡ khỏi danh mục thì máy không còn nguyên vẹn: phải ráp lại.
-    const pcBuilt = !!data.pcBuilt && dropped === 0;
-    return { build, pcBuilt, game: pcBuilt ? (data.game ?? null) : null };
+    const data = JSON.parse(raw) as Partial<BuildState>;
+    return { build: sanitize(data.build).build };
   } catch {
     return empty();
   }
@@ -43,11 +34,13 @@ function load(): GameState {
 type Listener = () => void;
 const listeners = new Set<Listener>();
 
-function commit() {
+/** Mỗi lần đổi tạo object state mới, để React (useSyncExternalStore) nhận ra thay đổi. */
+function commit(next: BuildState) {
+  store.state = next;
   try {
-    localStorage.setItem(KEY, JSON.stringify(store.state));
+    localStorage.setItem(KEY, JSON.stringify(next));
   } catch {
-    // Không lưu được (chế độ riêng tư, hết dung lượng): vẫn chơi tiếp bình thường.
+    // Không lưu được (chế độ riêng tư, hết dung lượng): vẫn dùng tiếp bình thường.
   }
   listeners.forEach((fn) => fn());
 }
@@ -56,7 +49,7 @@ export const store = {
   state: empty(),
 
   /**
-   * Đọc tiến trình đã lưu. Phải gọi SAU khi danh mục linh kiện đã sẵn sàng, vì
+   * Đọc cấu hình đã lưu. Phải gọi SAU khi danh mục linh kiện đã sẵn sàng, vì
    * khe nào trỏ tới linh kiện không có trong danh mục sẽ bị bỏ trống.
    */
   hydrate() {
@@ -64,45 +57,63 @@ export const store = {
     listeners.forEach((fn) => fn());
   },
 
+  /** Lọc lại build theo danh mục hiện tại (sau khi trang quản trị đổi danh mục). */
+  resanitize() {
+    commit({ build: sanitize(this.state.build).build });
+  },
+
   subscribe(fn: Listener): () => void {
     listeners.add(fn);
     return () => listeners.delete(fn);
   },
 
-  /** Lắp một linh kiện vào khe, hoặc tháo ra (id = null). Đổi linh kiện thì phải khởi động lại. */
-  setSlot(category: Category, id: string | null) {
+  /** Chọn một linh kiện cho loại tương ứng, hoặc bỏ chọn (id = null). */
+  setSlot(category: SingleCategory, id: string | null) {
     if (id && PART_BY_ID.get(id)?.category !== category) return;
-    if (id) this.state.build[category] = id;
-    else delete this.state.build[category];
-    this.state.pcBuilt = false;
-    this.state.game = null;
-    commit();
+    const build = { ...this.state.build };
+    if (id) build[category] = id;
+    else delete build[category];
+    commit({ build });
+  },
+
+  /** Thêm một ổ cứng thêm (tối đa MAX_DRIVES). */
+  addDrive(id: string) {
+    const drives = this.state.build.drive ?? [];
+    if (drives.length >= MAX_DRIVES || PART_BY_ID.get(id)?.category !== 'drive') return;
+    commit({ build: { ...this.state.build, drive: [...drives, id] } });
+  },
+
+  /** Bỏ ổ cứng thêm ở vị trí `index`. */
+  removeDrive(index: number) {
+    const drives = (this.state.build.drive ?? []).filter((_, i) => i !== index);
+    const build: BuildIds = { ...this.state.build, drive: drives };
+    if (!drives.length) delete build.drive;
+    commit({ build });
+  },
+
+  /** Chọn mẫu quạt và số lượng, hoặc bỏ quạt (id = null). */
+  setFan(id: string | null, qty?: number) {
+    const build = { ...this.state.build };
+    const n = qty ?? build.fan?.qty ?? 1;
+    if (!id) delete build.fan;
+    else if (PART_BY_ID.get(id)?.category === 'fan') {
+      build.fan = { id, qty: Math.min(MAX_FANS, Math.max(1, Math.round(n))) };
+    } else return;
+    commit({ build });
   },
 
   /**
-   * Nạp một build đã lưu vào các khe, thay hẳn cấu hình đang ráp.
+   * Nạp một build (đã lưu hoặc từ link chia sẻ), thay hẳn cấu hình đang ráp.
    * Trả về số linh kiện bị bỏ qua vì không còn trong danh mục.
    */
   loadBuild(ids: BuildIds): number {
     const { build, dropped } = sanitize(ids);
-    this.state = { build, pcBuilt: false, game: null };
-    commit();
+    commit({ build });
     return dropped;
   },
 
-  markBuilt() {
-    this.state.pcBuilt = true;
-    commit();
-  },
-
-  setGame(id: GameId | null) {
-    this.state.game = id;
-    commit();
-  },
-
-  /** Tháo hết linh kiện, quay về bàn trống. */
+  /** Bỏ hết linh kiện. */
   reset() {
-    this.state = empty();
-    commit();
+    commit(empty());
   },
 };

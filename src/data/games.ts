@@ -16,7 +16,7 @@ export interface GameDef {
   lowRatio: number;
 }
 
-// Số liệu mô phỏng cho trò chơi, không phải benchmark thật.
+// Số liệu mô phỏng để so sánh cấu hình, không phải benchmark thật.
 export const GAMES: GameDef[] = [
   { id: 'lol', name: 'League of Legends', color: '#0b2a3a', accent: '#c8aa6e', cpuRefFps: 260, gpuRefFps: 420, engineCap: 1000, lowRatio: 0.65 },
   { id: 'dota2', name: 'Dota 2', color: '#2a0f0c', accent: '#e0452c', cpuRefFps: 170, gpuRefFps: 190, engineCap: 240, lowRatio: 0.7 },

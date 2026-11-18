@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { GAMES, GAME_BY_ID } from '../data/games';
 import { resolveBuild, type BuildIds } from '../data/parts';
-import { estimateFps } from './fps';
+import { RESOLUTION_FACTOR, buildResolution, estimateFps } from './fps';
 
 const BUDGET: BuildIds = { cpu: 'cpu-12100f', ram: 'ram-d4-16', gpu: 'gpu-1650' };
 const MID: BuildIds = { cpu: 'cpu-5600', ram: 'ram-d4-16', gpu: 'gpu-3060' };
@@ -63,5 +63,29 @@ describe('estimateFps', () => {
     expect(fps({ cpu: 'cpu-5600', ram: 'ram-d4-16' })).toBeNull();
     expect(fps({ ram: 'ram-d4-16', gpu: 'gpu-3060' })).toBeNull();
     expect(fps({ cpu: 'cpu-5600', gpu: 'gpu-3060' })).toBeNull();
+  });
+});
+
+describe('FPS theo độ phân giải màn hình', () => {
+  const GPU_BOUND = { cpu: 'cpu-7800x3d', ram: 'ram-d5-32', gpu: 'gpu-1650' };
+
+  it('không chọn màn hình thì tính ở 1080p', () => {
+    expect(buildResolution(resolveBuild(GPU_BOUND))).toBe('1080p');
+  });
+
+  it('màn 1440p và 4K làm giảm FPS khi card đồ họa là giới hạn', () => {
+    const game = GAME_BY_ID.cs2;
+    const p1080 = estimateFps(resolveBuild(GPU_BOUND), game)!.avg;
+    const p1440 = estimateFps(resolveBuild({ ...GPU_BOUND, monitor: 'mon-27-1440' }), game)!.avg;
+    const p4k = estimateFps(resolveBuild({ ...GPU_BOUND, monitor: 'mon-27-4k' }), game)!.avg;
+    expect(Math.abs(p1440 - p1080 * RESOLUTION_FACTOR['1440p'])).toBeLessThanOrEqual(1);
+    expect(p4k).toBeLessThan(p1440);
+  });
+
+  it('màn 1080p tần số cao không đổi FPS', () => {
+    const game = GAME_BY_ID.valorant;
+    expect(estimateFps(resolveBuild({ ...GPU_BOUND, monitor: 'mon-24-180' }), game)).toEqual(
+      estimateFps(resolveBuild(GPU_BOUND), game),
+    );
   });
 });

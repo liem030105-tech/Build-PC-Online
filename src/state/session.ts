@@ -4,13 +4,15 @@ type Listener = () => void;
 const listeners = new Set<Listener>();
 const notify = () => listeners.forEach((fn) => fn());
 
-/** Phiên đăng nhập Xano của người chơi. */
+/** Phiên đăng nhập Xano của người dùng. */
 export const session = {
   client: new XanoClient({
     apiUrl: import.meta.env.VITE_XANO_API_URL ?? '',
     authUrl: import.meta.env.VITE_XANO_AUTH_URL,
   }),
   account: null as Account | null,
+  /** Đã khôi phục xong phiên từ token (thành công hay không). Trước đó chưa biết có đăng nhập không. */
+  ready: false,
 
   subscribe(fn: Listener): () => void {
     listeners.add(fn);
@@ -19,12 +21,14 @@ export const session = {
 
   /** Khôi phục phiên từ token đã lưu. Token hết hạn thì coi như chưa đăng nhập. */
   async restore(): Promise<void> {
-    if (!this.client.configured || !this.client.hasToken) return;
-    try {
-      this.account = await this.client.me();
-    } catch {
-      this.account = null;
+    if (this.client.configured && this.client.hasToken) {
+      try {
+        this.account = await this.client.me();
+      } catch {
+        this.account = null;
+      }
     }
+    this.ready = true;
     notify();
   },
 
